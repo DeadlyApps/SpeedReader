@@ -25,20 +25,19 @@ class MainFrame(ttk.Frame):
         row_index = 0
         self.grid_rowconfigure(row_index, weight=1)
         self.title = ttk.Label(self, font=("Georgia", "80"), justify=RIGHT, text="Speed Reader", anchor=CENTER)
-        self.title.grid(row=row_index, column=1,columnspan=2, sticky=(N, W, E),pady=15)
+        self.title.grid(row=row_index, column=0, columnspan=4, sticky=(N, W, E), pady=15)
         row_index += 1
 
         self.spoken_words = ttk.Label(self, font=("Georgia", "20"), justify=RIGHT, anchor=E)
-        self.spoken_words.grid(row=row_index, column=1, columnspan=2, sticky=(W,E))
+        self.spoken_words.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
         row_index += 1
 
         self.current_word_label = ttk.Label(self, font=("Georgia", "120"), anchor=CENTER)
-        self.current_word_label.grid(row=row_index, column=1, columnspan=2, sticky=(W,E))
+        self.current_word_label.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
         row_index += 1
 
-
         self.next_words = ttk.Label(self, font=("Georgia", "20"), anchor=W)
-        self.next_words.grid(row=row_index, column=1, columnspan=2, sticky=(W, E))
+        self.next_words.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
 
         row_index += 1
 
@@ -50,7 +49,7 @@ class MainFrame(ttk.Frame):
         row_index += 1
 
         self.grid_rowconfigure(row_index, weight=1)
-        self.text_area = Text(self, height=5, width=1, font=("Georgia", "25"))
+        self.text_area = Text(self, height=5, width=1, font=("Georgia", "40"))
         self.text_area.insert(END, '')
         self.text_area.tag_config(TAG_CURRENT_WORD, foreground="red")
         self.text_area.grid(row=row_index, column=0, columnspan=4, sticky=(N, S, E, W))
@@ -78,13 +77,14 @@ class MainFrame(ttk.Frame):
         print("onStart")
 
     def onWord(self, name, location, length):
-        left_index = location - 50
+        read_trail = 100
+        left_index = location - read_trail
         if left_index < 0:
             left_index = 0
 
         self.spoken_words['text'] = self.spoken_text[left_index:location]
         self.current_word_label['text'] = self.spoken_text[location:location + length]
-        self.next_words['text'] = self.spoken_text[location + length:location + length + 50]
+        self.next_words['text'] = self.spoken_text[location + length:location + length + read_trail]
         if self.highlight_index1 is not None:
             self.text_area.tag_remove(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
         self.highlight_index1 = "1.{}".format(location)
@@ -118,6 +118,7 @@ class MainFrame(ttk.Frame):
             self.engine.say(spoken_text)
             self.engine.startLoop()
         else:
+            self.engine.setProperty('rate', speech_speed)
             self.engine.say(spoken_text)
 
         print("thread finished")

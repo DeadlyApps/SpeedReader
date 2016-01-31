@@ -1,6 +1,5 @@
 from Tkconstants import N, S, E, W
 from Tkinter import Tk
-
 from Frames.MainFrame import MainFrame
 
 
