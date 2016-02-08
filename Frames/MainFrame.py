@@ -1,6 +1,6 @@
 import thread
 import ttk
-from Tkconstants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER
+from Tkconstants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT
 from Tkinter import Text
 
 import pyttsx
@@ -65,6 +65,20 @@ class MainFrame(ttk.Frame):
         self.stop_button['state'] = DISABLED
         self.stop_button.bind("<Button-1>", self.stop)
 
+        self.text_area.bind("<Control-Key-a>", self.select_all_text)
+        self.text_area.bind("<Control-Key-A>", self.select_all_text)
+
+        self.master.bind("<Control-Key-b>", self.paste_and_speak)
+        self.master.bind("<Control-Key-B>", self.paste_and_speak)
+
+    def paste_and_speak(self, event):
+        self.text_area.delete("1.0", END)
+        self.text_area.insert(END, self.master.clipboard_get())
+        self.speak(event)
+
+    def select_all_text(self, event):
+        self.text_area.tag_add(SEL, "1.0", END)
+
     def stop(self, event):
         if self.stop_button['state'].__str__() == NORMAL:
             self.engine.stop()
@@ -104,7 +118,6 @@ class MainFrame(ttk.Frame):
             self.text_area.insert(END, self.spoken_text)
 
             speech_speed = int(self.speed_entry.get())
-            print("starting thread")
             thread.start_new_thread(self.speak_on_thread, (speech_speed, self.spoken_text))
 
     def speak_on_thread(self, speech_speed, spoken_text):
@@ -120,8 +133,6 @@ class MainFrame(ttk.Frame):
         else:
             self.engine.setProperty('rate', speech_speed)
             self.engine.say(spoken_text)
-
-        print("thread finished")
 
 
 TAG_CURRENT_WORD = "current word"
