@@ -22,10 +22,18 @@ class MainFrame(ttk.Frame):
         self.grid_columnconfigure(3, weight=1)
 
         row_index = 0
+
+        self.progress = ttk.Progressbar(self, orient=HORIZONTAL, mode="determinate")
+        self.progress.grid(row=row_index, columnspan=4, sticky=(W, E))
+
+        row_index += 1
+
+
         self.grid_rowconfigure(row_index, weight=1)
         self.title = ttk.Label(self, font=("Georgia", "80"), justify=RIGHT, text="Speed Reader", anchor=CENTER)
         self.title.grid(row=row_index, column=0, columnspan=4, sticky=(N, W, E), pady=15)
         row_index += 1
+
 
         self.spoken_words = ttk.Label(self, font=("Georgia", "20"), justify=RIGHT, anchor=E)
         self.spoken_words.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
@@ -47,10 +55,7 @@ class MainFrame(ttk.Frame):
         self.speed_entry.grid(row=row_index, column=2, pady=10)
         row_index += 1
 
-        self.progress = ttk.Progressbar(self, orient=HORIZONTAL, mode="determinate")
-        self.progress.grid(row=row_index, columnspan=4, sticky=(W, E))
 
-        row_index += 1
 
         self.grid_rowconfigure(row_index, weight=1)
         self.text_area = Text(self, height=5, width=1, font=("Georgia", "40"))
