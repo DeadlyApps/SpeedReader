@@ -1,8 +1,7 @@
 import thread
 import ttk
-from Tkconstants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT
+from Tkconstants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
 from Tkinter import Text
-
 import pyttsx
 
 
@@ -46,6 +45,11 @@ class MainFrame(ttk.Frame):
         self.speed_entry = ttk.Entry(self)
         self.speed_entry.insert(0, "500")
         self.speed_entry.grid(row=row_index, column=2, pady=10)
+        row_index += 1
+
+        self.progress = ttk.Progressbar(self, orient=HORIZONTAL, mode="determinate")
+        self.progress.grid(row=row_index, columnspan=4, sticky=(W, E))
+
         row_index += 1
 
         self.grid_rowconfigure(row_index, weight=1)
@@ -106,9 +110,14 @@ class MainFrame(ttk.Frame):
         self.text_area.see(self.highlight_index1)
         self.text_area.tag_add(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
 
+        self.progress["maximum"] = self.spoken_text.__len__()
+        self.progress["value"] = location
+
     def onEnd(self, name, completed):
         self.speak_button['state'] = NORMAL
         self.stop_button['state'] = DISABLED
+        self.progress["maximum"] = self.spoken_text.__len__()
+        self.progress["value"] = self.spoken_text.__len__()
         print("onEnd")
 
     def speak(self, event):
