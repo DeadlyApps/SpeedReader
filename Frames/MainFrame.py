@@ -1,8 +1,8 @@
-import thread
-import ttk
-from Tkconstants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
-from Tkinter import Text
-import pyttsx
+import _thread as thread
+import tkinter.ttk as ttk
+from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
+from tkinter import Text
+import pyttsx3 as pyttsx
 
 
 class MainFrame(ttk.Frame):
