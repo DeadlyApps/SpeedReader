@@ -7,5 +7,13 @@ In college my now father in law was using a text to speech program and talking a
 I believe if you are an auditory learning this tool can be massively helpful to you.
 
 # Setup
+## Run Locally Setup
 Tested with Python 3.7
+
 install requirements.txt
+pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3/issues/78
+
+## Convert to EXE
+Py2exe needs to be updated manually to fix this bug: https://github.com/pyinstaller/pyinstaller/issues/3268
+
+pyinstaller --clean --onefile --windowed NameOfYourApplication.spec

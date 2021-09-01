@@ -1,14 +1,20 @@
 import os
 from distutils.core import setup
-
 import pathlib
 import py2exe
 import sys
 
 if len(sys.argv) == 1:
     sys.argv.append("py2exe")
-py2exe_options = { 'includes': ['pyttsx.drivers.sapi5', 'win32com.gen_py.C866CA3A-32F7-11D2-9602-00C04F8EE628x0x5x4'],
-               'typelibs': [('{C866CA3A-32F7-11D2-9602-00C04F8EE628}', 0, 5, 4)] }
+    
+hiddenimports = [
+    'pyttsx3.drivers',
+    'pyttsx3.drivers.dummy',
+    'pyttsx3.drivers.espeak',
+    'pyttsx3.drivers.nsss',
+    'pyttsx3.drivers.sapi5', ]
+
+py2exe_options = { 'includes': hiddenimports }
 
 tcl__path = '{}\\tcl\\tcl8.5\\init.tcl'.format(os.path.dirname(sys.executable))
 setup(
@@ -16,7 +22,7 @@ setup(
     windows=[{"script": 'SpeedReader.py'}],
     options = {'py2exe': py2exe_options},
     # data_files=[tcl__path],
-    requires=['pyttsx'])
+    requires=['pyttsx3'])
 
 import zipfile
 

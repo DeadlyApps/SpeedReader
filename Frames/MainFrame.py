@@ -1,9 +1,9 @@
-import _thread as thread
+import threading
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
 from tkinter import Text
-import pyttsx3 as pyttsx
-
+import pyttsx3
+from pyttsx3 import engine
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
@@ -81,6 +81,7 @@ class MainFrame(ttk.Frame):
         self.master.bind("<Control-Key-B>", self.paste_and_speak)
 
     def paste_and_speak(self, event):
+        self.stop(event)
         self.text_area.delete("1.0", END)
         self.text_area.insert(END, self.master.clipboard_get())
         self.speak(event)
@@ -99,7 +100,7 @@ class MainFrame(ttk.Frame):
         self.stop_button['state'] = NORMAL
         print("onStart")
 
-    def onWord(self, name, location, length):
+    def onStartWord(self, name, location, length):
         read_trail = 100
         left_index = location - read_trail
         if left_index < 0:
@@ -132,15 +133,17 @@ class MainFrame(ttk.Frame):
             self.text_area.insert(END, self.spoken_text)
 
             speech_speed = int(self.speed_entry.get())
-            thread.start_new_thread(self.speak_on_thread, (speech_speed, self.spoken_text))
+
+            thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
+            thread.start()
 
     def speak_on_thread(self, speech_speed, spoken_text):
 
         if self.engine is None:
-            self.engine = pyttsx.init()
+            self.engine = pyttsx3.init()
             self.engine.setProperty('rate', speech_speed)
             self.engine.connect('started-utterance', self.onStart)
-            self.engine.connect('started-word', self.onWord)
+            self.engine.connect('started-word', self.onStartWord)
             self.engine.connect('finished-utterance', self.onEnd)
             self.engine.say(spoken_text)
             self.engine.startLoop()
