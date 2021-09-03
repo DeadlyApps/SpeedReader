@@ -4,6 +4,7 @@ from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, 
 from tkinter import Text
 import pyttsx3
 from pyttsx3 import engine
+import re
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
@@ -128,7 +129,11 @@ class MainFrame(ttk.Frame):
 
     def speak(self, event):
         if self.speak_button['state'].__str__() == NORMAL:
-            self.spoken_text = self.text_area.get("1.0", END).replace('\n', ' ')
+            text = self.text_area.get("1.0", END).replace('\n', ' ')
+            print(text)
+            text = re.sub(r'http\S+', ' [URL] ', text)
+            print(text)
+            self.spoken_text = text
             self.text_area.delete("1.0", END)
             self.text_area.insert(END, self.spoken_text)
 
