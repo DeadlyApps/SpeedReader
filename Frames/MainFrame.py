@@ -81,6 +81,14 @@ class MainFrame(ttk.Frame):
         self.master.bind("<Control-Key-b>", self.paste_and_speak)
         self.master.bind("<Control-Key-B>", self.paste_and_speak)
 
+        self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def on_closing(self):
+        self.stop(None)
+        self.master.destroy()
+        self.master.quit()
+        
+
     def paste_and_speak(self, event):
         self.stop(event)
         self.text_area.delete("1.0", END)
@@ -130,17 +138,16 @@ class MainFrame(ttk.Frame):
     def speak(self, event):
         if self.speak_button['state'].__str__() == NORMAL:
             text = self.text_area.get("1.0", END).replace('\n', ' ')
-            print(text)
             text = re.sub(r'http\S+', ' [URL] ', text)
-            print(text)
             self.spoken_text = text
             self.text_area.delete("1.0", END)
             self.text_area.insert(END, self.spoken_text)
 
             speech_speed = int(self.speed_entry.get())
 
-            thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
-            thread.start()
+            self.thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
+            self.thread.daemon = True
+            self.thread.start()
 
     def speak_on_thread(self, speech_speed, spoken_text):
 
