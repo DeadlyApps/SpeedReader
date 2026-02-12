@@ -1,13 +1,29 @@
 import threading
 import webbrowser
 import tkinter.ttk as ttk
-from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, LEFT, SEL, INSERT, HORIZONTAL
-from tkinter import Text, StringVar, BooleanVar, Toplevel
-from Core.speech_engine import SpeechEngine
-from Core.speak_service import SpeakService
-from Core.voice_registry import VoiceRegistry
-from Core.config import load_mcp_config, save_enabled_voices, save_mcp_port
-from Core.text_processing import preprocess_text, word_window, highlight_indices
+from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
+from tkinter import Text
+import pyttsx3
+from pyttsx3 import engine
+import re
+import platform
+import asyncio
+
+# Windows media key support
+if platform.system() == 'Windows':
+    import ctypes
+    VK_MEDIA_PLAY_PAUSE = 0xB3
+    KEYEVENTF_EXTENDEDKEY = 0x0001
+    KEYEVENTF_KEYUP = 0x0002
+    
+    # Try to import Windows Media Session API for detecting playback state
+    try:
+        from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
+        from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus
+        MEDIA_SESSION_AVAILABLE = True
+    except ImportError:
+        MEDIA_SESSION_AVAILABLE = False
+        print("Windows Media Session API not available - media detection disabled")
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
@@ -370,19 +386,68 @@ class MainFrame(ttk.Frame):
     def pause_system_media(self):
         """Pause any currently playing system media (Windows only).
         
-        Sends a media play/pause key event to pause music players.
-        Sets media_was_paused flag so we know to resume later.
+        Uses Windows Media Session API to check if media is actually playing
+        before sending the pause command. This prevents toggling music that
+        was already paused.
         """
-        if platform.system() == 'Windows':
-            try:
-                # Send media play/pause key press
-                ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY, 0)
-                ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
-                self.media_was_paused = True
-                print("Paused system media playback")
-            except Exception as e:
-                print(f"Error pausing media: {e}")
-                self.media_was_paused = False
+        if platform.system() != 'Windows':
+            return
+            
+        # Check if media is actually playing before pausing
+        if not self._is_media_playing():
+            print("No media playing - skipping pause")
+            self.media_was_paused = False
+            return
+            
+        try:
+            # Send media play/pause key press to pause
+            ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY, 0)
+            ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
+            self.media_was_paused = True
+            print("Paused system media playback")
+        except Exception as e:
+            print(f"Error pausing media: {e}")
+            self.media_was_paused = False
+    
+    def _is_media_playing(self):
+        """Check if system media is currently playing (Windows only).
+        
+        Uses Windows Media Session API to query the current playback state.
+        Returns True if media is playing, False otherwise.
+        """
+        if platform.system() != 'Windows':
+            return False
+            
+        if not MEDIA_SESSION_AVAILABLE:
+            # If API not available, assume nothing is playing to be safe
+            return False
+            
+        try:
+            # Run async check synchronously
+            return asyncio.run(self._check_media_playing_async())
+        except Exception as e:
+            print(f"Error checking media state: {e}")
+            return False
+    
+    async def _check_media_playing_async(self):
+        """Async helper to check media playback state."""
+        try:
+            # Get the media session manager
+            manager = await GlobalSystemMediaTransportControlsSessionManager.request_async()
+            session = manager.get_current_session()
+            
+            if session is None:
+                return False
+                
+            # Get playback info
+            playback_info = session.get_playback_info()
+            status = playback_info.playback_status
+            
+            # Check if currently playing
+            return status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
+        except Exception as e:
+            print(f"Error in async media check: {e}")
+            return False
     
     def resume_system_media(self):
         """Resume system media playback if we previously paused it (Windows only).

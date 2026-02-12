@@ -728,10 +728,11 @@ class TestMainFrameMediaControl:
     @patch('Frames.MainFrame.platform')
     @patch('Frames.MainFrame.ctypes')
     def test_pause_system_media_sends_key_on_windows(self, mock_ctypes, mock_platform, frame):
-        """pause_system_media should send media key on Windows."""
+        """pause_system_media should send media key on Windows when media is playing."""
         # Arrange
         mock_platform.system.return_value = 'Windows'
         frame.media_was_paused = False
+        frame._is_media_playing = Mock(return_value=True)  # Media is playing
 
         # Act
         frame.pause_system_media()
@@ -739,6 +740,22 @@ class TestMainFrameMediaControl:
         # Assert
         assert frame.media_was_paused is True
         assert mock_ctypes.windll.user32.keybd_event.call_count == 2
+
+    @patch('Frames.MainFrame.platform')
+    @patch('Frames.MainFrame.ctypes')
+    def test_pause_system_media_skipped_when_not_playing(self, mock_ctypes, mock_platform, frame):
+        """pause_system_media should not send key when no media is playing."""
+        # Arrange
+        mock_platform.system.return_value = 'Windows'
+        frame.media_was_paused = False
+        frame._is_media_playing = Mock(return_value=False)  # No media playing
+
+        # Act
+        frame.pause_system_media()
+
+        # Assert
+        assert frame.media_was_paused is False
+        mock_ctypes.windll.user32.keybd_event.assert_not_called()
 
     @patch('Frames.MainFrame.platform')
     def test_pause_system_media_skipped_on_non_windows(self, mock_platform, frame):
@@ -822,3 +839,28 @@ class TestMainFrameMediaControl:
 
         # Assert
         frame.resume_system_media.assert_called_once()
+
+    @patch('Frames.MainFrame.platform')
+    @patch('Frames.MainFrame.MEDIA_SESSION_AVAILABLE', False)
+    def test_is_media_playing_returns_false_when_api_unavailable(self, mock_platform, frame):
+        """_is_media_playing should return False when API is unavailable."""
+        # Arrange
+        mock_platform.system.return_value = 'Windows'
+
+        # Act
+        result = frame._is_media_playing()
+
+        # Assert
+        assert result is False
+
+    @patch('Frames.MainFrame.platform')
+    def test_is_media_playing_returns_false_on_non_windows(self, mock_platform, frame):
+        """_is_media_playing should return False on non-Windows."""
+        # Arrange
+        mock_platform.system.return_value = 'Linux'
+
+        # Act
+        result = frame._is_media_playing()
+
+        # Assert
+        assert result is False

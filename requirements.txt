@@ -1,3 +1,5 @@
 pyttsx3==2.71
 pyinstaller
-mcp
+pytest
+winrt-runtime
+winrt-Windows.Media.Control
