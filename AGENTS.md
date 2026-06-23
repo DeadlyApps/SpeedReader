@@ -68,5 +68,7 @@ The tests mock `pyttsx3` (see [tests/test_speech_engine.py](tests/test_speech_en
 - ALWAYS create (not just suggest) any skill you wished you had before starting the prompt — create the missing `SKILL.md` under `.github/skills/<name>/` before finishing, then list what you created
 - always end out chats with a 🏃‍♂️‍➡️ emoji
 - favor brevity and yagni
+- ALWAYS keep [README.md](README.md) up to date for GitHub users when behavior, setup, run/build steps, or user-facing features change (e.g. the MCP server, config, shortcuts) — update it in the same change, never defer it
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
 - REPEAT: missing skills must be CREATED as files, never left as suggestions
+- REPEAT: user-facing changes are not done until [README.md](README.md) reflects them
