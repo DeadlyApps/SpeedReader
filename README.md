@@ -18,6 +18,7 @@ pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3
 - **Voice** — pick from the text-to-speech voices installed on your system; the choice applies to both your reading and any AI agent speaking through the MCP server.
 - **Voice Settings…** — choose which system voices agents are allowed to use (see below). All voices are enabled by default.
 - **Server port** + **Restart Server** — change the port the MCP server listens on and restart it on the new port without closing the app. The new port is saved to `config.json` (`mcp.port`) so it sticks across sessions. Only active when MCP hosting is enabled (see below).
+- **Server Status…** — open a live dialog showing whether the MCP server is hosting (and on which port), whether pause-while-mic-in-use is on (and your current mic state), and each enabled voice with the agents that have claimed it.
 - Shortcuts: `Ctrl+B` paste & speak, `Ctrl+A` select all.
 
 ## MCP server (let AI agents speak through SpeedReader)

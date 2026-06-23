@@ -1,7 +1,7 @@
 import threading
 import webbrowser
 import tkinter.ttk as ttk
-from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
+from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, LEFT, SEL, INSERT, HORIZONTAL
 from tkinter import Text, StringVar, BooleanVar, Toplevel
 from Core.speech_engine import SpeechEngine
 from Core.speak_service import SpeakService
@@ -128,6 +128,9 @@ class MainFrame(ttk.Frame):
         self.server_status_var = StringVar(value="")
         self.server_status = ttk.Label(self.settings_frame, textvariable=self.server_status_var)
         self.server_status.grid(row=1, column=3, columnspan=2, sticky=W, pady=(10, 0))
+        self.server_status_button = ttk.Button(
+            self.settings_frame, text="Server Status…", command=self.open_server_status)
+        self.server_status_button.grid(row=2, column=0, columnspan=2, sticky=W, pady=(10, 0))
         row_index += 1
 
 
@@ -196,6 +199,60 @@ class MainFrame(ttk.Frame):
         buttons.grid(row=len(self.voices) + 1, column=0, sticky=E, padx=12, pady=12)
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).grid(row=0, column=0, padx=(0, 6))
         ttk.Button(buttons, text="Save", command=save).grid(row=0, column=1)
+
+    def open_server_status(self):
+        """Show MCP server status: hosting state plus per-voice agent claims.
+
+        Refreshes on a timer so claims/releases and live mic state stay current,
+        and cancels that timer when the dialog closes.
+        """
+        dialog = Toplevel(self)
+        dialog.title("MCP Server Status")
+        dialog.transient(self.master)
+
+        body = ttk.Label(dialog, justify=LEFT, anchor=W, font=("Consolas", 11))
+        body.grid(row=0, column=0, sticky=(N, S, W, E), padx=12, pady=12)
+
+        def refresh():
+            body['text'] = self._server_status_text()
+            dialog._status_job = dialog.after(1000, refresh)
+
+        def on_close():
+            job = getattr(dialog, "_status_job", None)
+            if job is not None:
+                dialog.after_cancel(job)
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Close", command=on_close).grid(
+            row=1, column=0, sticky=E, padx=12, pady=(0, 12))
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
+        refresh()
+
+    def _server_status_text(self):
+        """Build the multi-line status text for the Server Status dialog."""
+        lines = []
+        host = self.mcp_host
+        if host is not None and host.is_running():
+            lines.append("Server: running on {}:{}".format(host.host, host.port))
+            paused = getattr(host, "pause_when_mic_in_use", False)
+            lines.append("Pause while mic in use: {}".format("on" if paused else "off"))
+            if paused:
+                from Core.call_detection import microphone_in_use
+                lines.append("Microphone in use now: {}".format(
+                    "yes" if microphone_in_use() else "no"))
+        else:
+            lines.append("Server: not hosting (enable mcp in config.json)")
+
+        lines.append("")
+        lines.append("Voices and the agents that claimed them:")
+        status = self.voice_registry.status()
+        if not status:
+            lines.append("  (no voices enabled)")
+        for entry in status:
+            holders = entry["claimed_by"]
+            who = ", ".join(holders) if holders else "(unclaimed)"
+            lines.append("  {} — {}".format(entry["name"], who))
+        return "\n".join(lines)
 
     def set_server_port(self, port):
         """Reflect the active MCP port in the UI and enable Restart (host is up)."""
