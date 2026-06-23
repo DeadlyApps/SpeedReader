@@ -43,8 +43,10 @@ pyinstaller --clean --onefile --windowed SpeedReader.spec
 There are no automated tests; verify changes by running the app and exercising Speak/Stop and the `Ctrl+B` (paste & speak) / `Ctrl+A` (select all) shortcuts.
 
 # Custom Instructions
+- be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
 - list skills you used in completing the prompt
-- create and list skills you wish you had before starting the prompt
+- ALWAYS create (not just suggest) any skill you wished you had before starting the prompt — create the missing `SKILL.md` under `.github/skills/<name>/` before finishing, then list what you created
 - always end out chats with a 🏃‍♂️‍➡️ emoji
 - favor brevity and yagni
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
+- REPEAT: missing skills must be CREATED as files, never left as suggestions
