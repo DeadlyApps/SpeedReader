@@ -8,12 +8,12 @@ I believe if you are an auditory learning this tool can be massively helpful to 
 
 # Setup
 ## Run Locally Setup
-Tested with Python 3.7
+Tested with Python 3.14 (originally developed on 3.7)
 
 install requirements.txt
 pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3/issues/78
 
 ## Convert to EXE
-Py2exe needs to be updated manually to fix this bug: https://github.com/pyinstaller/pyinstaller/issues/3268
+The build uses PyInstaller (see SpeedReader.spec). For background on the bootloader fix: https://github.com/pyinstaller/pyinstaller/issues/3268
 
 pyinstaller --clean --onefile --windowed SpeedReader.spec

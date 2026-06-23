@@ -25,7 +25,7 @@ Thin MVC split — keep new UI logic in the frame, not in entry points:
 - `pyttsx3` is **pinned to `2.71`** in [requirements.txt](requirements.txt) due to a known bug — do not bump it without checking https://github.com/nateshmbhat/pyttsx3/issues/78.
 - Tag name constant `TAG_CURRENT_WORD` is defined at the **bottom** of `MainFrame.py`; it must stay defined before use at runtime (module-level, evaluated at call time).
 - Button enable/disable is checked via `widget['state'].__str__() == NORMAL/DISABLED`; follow that pattern for new buttons.
-- Targets/tested on **Python 3.7, Windows** (uses the Windows SAPI voice via pyttsx3).
+- Targets/tested on **Python 3.14, Windows** (uses the Windows SAPI voice via pyttsx3); originally developed on 3.7.
 
 ## Run & build
 

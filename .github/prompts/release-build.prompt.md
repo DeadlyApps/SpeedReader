@@ -12,6 +12,6 @@ Steps:
    pyinstaller --clean --onefile --windowed SpeedReader.spec
    ```
 3. Confirm `dist/SpeedReader.exe` was produced and report its path and size.
-4. If the build fails with a PyInstaller/py2exe bootloader issue, point the user to the manual fix noted in [README.md](../../README.md) (https://github.com/pyinstaller/pyinstaller/issues/3268) instead of guessing.
+4. If the build fails with a PyInstaller bootloader issue, point the user to the background link noted in [README.md](../../README.md) (https://github.com/pyinstaller/pyinstaller/issues/3268) instead of guessing.
 
 Do not modify [SpeedReader.spec](../../SpeedReader.spec) unless the user explicitly asks. Report the result; do not run the produced EXE.
