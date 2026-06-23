@@ -35,16 +35,31 @@ class MainFrame(ttk.Frame):
         row_index += 1
 
 
-        self.spoken_words = ttk.Label(self, font=("Georgia", "20"), justify=RIGHT, anchor=E)
-        self.spoken_words.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
+        self.spoken_words_container = ttk.Frame(self, height=40)
+        self.spoken_words_container.grid(row=row_index, column=0, columnspan=4, sticky=(N, S, W, E))
+        self.spoken_words_container.grid_propagate(False)  # lock height so text length never resizes the window
+        self.spoken_words_container.grid_rowconfigure(0, weight=1)
+        self.spoken_words_container.grid_columnconfigure(0, weight=1)
+        self.spoken_words = ttk.Label(self.spoken_words_container, font=("Georgia", "20"), justify=RIGHT, anchor=E)
+        self.spoken_words.grid(row=0, column=0, sticky=(N, S, W, E))
         row_index += 1
 
-        self.current_word_label = ttk.Label(self, font=("Georgia", "120"), anchor=CENTER)
-        self.current_word_label.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
+        self.current_word_container = ttk.Frame(self, height=180)
+        self.current_word_container.grid(row=row_index, column=0, columnspan=4, sticky=(N, S, W, E))
+        self.current_word_container.grid_propagate(False)  # lock height so word length never resizes the window
+        self.current_word_container.grid_rowconfigure(0, weight=1)
+        self.current_word_container.grid_columnconfigure(0, weight=1)
+        self.current_word_label = ttk.Label(self.current_word_container, font=("Georgia", "120"), anchor=CENTER)
+        self.current_word_label.grid(row=0, column=0, sticky=(N, S, W, E))
         row_index += 1
 
-        self.next_words = ttk.Label(self, font=("Georgia", "20"), anchor=W)
-        self.next_words.grid(row=row_index, column=0, columnspan=4, sticky=(W, E))
+        self.next_words_container = ttk.Frame(self, height=40)
+        self.next_words_container.grid(row=row_index, column=0, columnspan=4, sticky=(N, S, W, E))
+        self.next_words_container.grid_propagate(False)  # lock height so text length never resizes the window
+        self.next_words_container.grid_rowconfigure(0, weight=1)
+        self.next_words_container.grid_columnconfigure(0, weight=1)
+        self.next_words = ttk.Label(self.next_words_container, font=("Georgia", "20"), anchor=W)
+        self.next_words.grid(row=0, column=0, sticky=(N, S, W, E))
 
         row_index += 1
 
