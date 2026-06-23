@@ -14,6 +14,12 @@ class MainFrame(ttk.Frame):
         ttk.Frame.__init__(self, **kw)
         self.speech = SpeechEngine(self.onStart, self.onStartWord, self.onEnd)
         self.speak_service = SpeakService(rate=500, speak_fn=self.speak_external)
+        # Create + pump the pyttsx3 COM engine on ONE dedicated daemon thread.
+        # It MUST NOT be created on this (tkinter main) thread, or SAPI5's word
+        # callbacks fire on the pump thread with no Python thread state and crash
+        # the process. prime_async builds it on the loop thread; get_voices then
+        # waits for the voices that thread enumerated.
+        self.speech.prime_async(500)
         self.voices = self.speech.get_voices()
         self.voice_registry = self._build_voice_registry()
         self.mcp_host = None  # set by the controller when MCP hosting is enabled
@@ -21,9 +27,6 @@ class MainFrame(ttk.Frame):
         self.highlight_index1 = None
         self.highlight_index2 = None
         self.build_frame_content(kw)
-        # Prime the single pyttsx3 run loop on a daemon thread so every speak
-        # (GUI and MCP) only has to queue + wait, never start the loop.
-        threading.Thread(target=self.speech.ensure_loop, args=(500,), daemon=True).start()
 
     def _build_voice_registry(self):
         """Build the agent voice registry from system voices + saved config.

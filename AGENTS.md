@@ -16,7 +16,8 @@ Thin MVC split — keep new UI logic in the frame, not in entry points:
 ## TTS engine model (the core pattern)
 
 - Speech runs on a **daemon `threading.Thread`** (`speak_on_thread`) so the tkinter UI stays responsive. UI updates are driven by `pyttsx3` callbacks, not by polling.
-- The engine is initialized **once** and reused. On first `speak`, `engine.startLoop()` is called and event callbacks are connected; subsequent calls only `setProperty('rate', ...)` and `say(...)`. Do not re-init or call `startLoop()` again.
+- HIGH-RISK/REPEAT: pyttsx3's SAPI5 engine is a **COM object** — it MUST be created, pumped (`startLoop`), and have its callbacks delivered on the **SAME thread**. Creating it on the tkinter main thread but pumping it on another thread makes word/utterance callbacks fire with no Python thread state and crashes the process (`PyEval_RestoreThread ... thread state NULL`, strict on Python 3.12+/3.14). So `MainFrame.__init__` calls `self.speech.prime_async(500)`, which creates AND pumps the engine (and enumerates voices) on **one dedicated daemon thread**, before `get_voices()`. Never call `pyttsx3.init()` / create the engine on the main thread.
+- The engine is initialized **once** and reused on that loop thread. `startLoop()` is called exactly once (guarded by `_started`). The main thread and MCP server thread never touch the COM engine: `get_voices()` returns the loop-thread-enumerated voices (cached/waited-for), `speak()` waits for the engine (`_await_engine`) then only `setProperty('rate', ...)` + `say(...)`, and `set_voice()` is store-only (applied per-utterance). Do not re-init or call `startLoop()` again.
 - Callbacks map to UI state:
   - `started-utterance` → `onStart` (toggle Speak/Stop button states)
   - `started-word` → `onStartWord` (move the red `current word` tag, update the spoken/current/next labels, advance the progress bar)

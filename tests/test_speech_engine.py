@@ -56,6 +56,7 @@ def test_stop_after_speak_stops_the_engine():
 
 def test_ensure_loop_starts_loop_once_without_speaking():
     speech, init, fake_engine = make_engine()
+    fake_engine.getProperty.return_value = []
 
     speech.ensure_loop(500)
 
@@ -66,6 +67,7 @@ def test_ensure_loop_starts_loop_once_without_speaking():
 
 def test_speak_after_ensure_loop_reuses_engine_without_second_startloop():
     speech, init, fake_engine = make_engine()
+    fake_engine.getProperty.return_value = []
 
     speech.ensure_loop(500)
     speech.speak('hello', 300, block=False)
@@ -116,5 +118,23 @@ def test_per_utterance_voice_overrides_default_voice():
     speech.speak('hi', 500, voice='agent-voice', block=False)
 
     fake_engine.setProperty.assert_any_call('voice', 'agent-voice')
+
+
+def test_primed_loop_owns_engine_creation_and_caches_voices():
+    # Regression: the COM engine must be created on the loop thread only. Once
+    # the loop is primed, get_voices/speak reuse that engine and never init a
+    # second one on the calling thread (which would crash SAPI5 callbacks).
+    speech, init, fake_engine = make_engine()
+    v1 = MagicMock(id='id-1')
+    v1.name = 'Alice'
+    fake_engine.getProperty.return_value = [v1]
+
+    speech.ensure_loop(500)  # stands in for the dedicated loop thread
+
+    assert speech.get_voices() == [('id-1', 'Alice')]
+    speech.speak('hi', 400, block=False)
+
+    init.assert_called_once()  # no second engine created by get_voices/speak
+    fake_engine.startLoop.assert_called_once()
 
 

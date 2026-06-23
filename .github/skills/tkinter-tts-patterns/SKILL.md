@@ -15,12 +15,19 @@ description: 'Use when adding or changing tkinter/ttk UI or pyttsx3 text-to-spee
 - All UI updates come from `pyttsx3` callbacks, not polling.
 - REPEAT: keep the thread `daemon = True` so it dies with the app.
 
-## Engine lifecycle (create ONCE, start loop ONCE — only via `ensure_loop`)
-- The engine is created once (`pyttsx3.init()` + `connect()` the callbacks) and reused. Creating the engine is SEPARATE from starting the run loop, so voices can be listed before any speech (`get_voices()` creates the engine but does NOT start the loop).
-- The run loop (`startLoop()`) is started AT MOST ONCE, ONLY by `ensure_loop()`, guarded by `_started`. `MainFrame.__init__` primes it on a **daemon thread** at startup (always — not just when hosting MCP). REPEAT: `speak()` NEVER starts the loop; it only applies properties + `say(...)`. `startLoop()` runs exactly once for the app's lifetime.
+## COM same-thread rule (HIGH-RISK — a crash, not just a freeze)
+- pyttsx3's SAPI5 engine is a **COM object**. It MUST be created, pumped (`startLoop`), and have its callbacks delivered on the **SAME thread**. Creating it on the tkinter main thread but pumping it on another thread makes SAPI5's word/utterance callbacks fire with NO Python thread state → fatal `PyEval_RestoreThread ... thread state NULL` crash (strict on Python 3.12+/3.14).
+- REPEAT: NEVER call `pyttsx3.init()` / create the engine on the tkinter main thread. `SpeechEngine.prime_async()` creates AND pumps it on one dedicated daemon thread.
+- The main thread and the MCP server thread NEVER touch the COM engine directly: `get_voices()` returns voices the loop thread enumerated (cached, waited-for), and `speak()` waits for the engine to be ready (`_await_engine`) instead of creating it.
+- `set_voice()` is **store-only** (applied per-utterance in `_apply_properties`) so the main thread never calls `setProperty` on the COM engine.
+- REPEAT: engine creation + voice enumeration + `startLoop` all happen on the `prime_async` loop thread; foreign threads only queue + wait.
+
+## Engine lifecycle (create ONCE, start loop ONCE — only on the loop thread)
+- The engine is created once (`pyttsx3.init()` + `connect()` the callbacks) and reused, on the dedicated loop thread. Voices are enumerated there too and cached, so `get_voices()` never creates the COM engine on the caller.
+- The run loop (`startLoop()`) is started AT MOST ONCE, guarded by `_started`. `MainFrame.__init__` primes it via `prime_async(500)` on a **daemon thread** at startup (always — not just when hosting MCP), BEFORE `get_voices()`. REPEAT: `speak()` NEVER starts the loop; it only applies properties + `say(...)`. `startLoop()` runs exactly once for the app's lifetime.
 - WHY: `startLoop()` blocks the thread that calls it. If `speak()` started the loop while holding its serialization lock, the lock would never release and every later speak would deadlock. So the loop owner is a dedicated daemon thread, and speakers only queue + wait. REPEAT: never call `startLoop()` under the speak lock.
 - NEVER re-init the engine and NEVER call `startLoop()` a second time. `_started` prevents a second call.
-- Voice: `set_voice(voice_id)` records the DEFAULT voice and applies `setProperty('voice', ...)`. `speak(text, rate, voice=...)` takes an optional PER-UTTERANCE voice that overrides the default for that one utterance (used by the MCP server so different agents speak in different voices). Rate (and the chosen voice) are re-applied on EVERY utterance. REPEAT: apply rate AND the per-utterance/default voice each `say`, not just on first speak.
+- Voice: `set_voice(voice_id)` records the DEFAULT voice (store-only; applied per-utterance). `speak(text, rate, voice=...)` takes an optional PER-UTTERANCE voice that overrides the default for that one utterance (used by the MCP server so different agents speak in different voices). Rate (and the chosen voice) are re-applied on EVERY utterance. REPEAT: apply rate AND the per-utterance/default voice each `say`, not just on first speak.
 - Callback → handler map: `started-utterance`→`onStart`, `started-word`→`onStartWord`, `finished-utterance`→`onEnd`. A SECOND `finished-utterance` subscriber (`_mark_done`) sets a `threading.Event` — pyttsx3 allows multiple callbacks per topic.
 
 ## Serialized speak (per-utterance voice — do NOT break)

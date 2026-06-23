@@ -4,12 +4,17 @@ import threading
 class SpeechEngine:
     """GUI-free wrapper around the pyttsx3 engine lifecycle.
 
-    The engine is created once and reused. Creating the engine (and connecting
-    callbacks) is separate from starting the run loop: ``get_voices`` can create
-    it early to populate a voice picker, and the loop is started exactly once by
-    ``ensure_loop`` (never by ``speak``). pyttsx3 allows only one run loop per
-    process, so ``ensure_loop`` must be running before any ``speak`` and is
-    primed on a daemon thread at startup.
+    pyttsx3's SAPI5 engine is a COM object, so it MUST be created, pumped, and
+    have its event callbacks delivered on the SAME thread. If the engine is
+    created on one thread (e.g. the tkinter main thread) but ``startLoop`` pumps
+    it on another, SAPI5's word/utterance callbacks fire with no Python thread
+    state and crash the process (``PyEval_RestoreThread ... thread state NULL``).
+
+    Therefore engine creation, voice enumeration, and ``startLoop`` all happen on
+    a single dedicated daemon thread, started by ``prime_async``. Other threads
+    (the tkinter UI, the MCP server) never create or touch the COM engine
+    directly: ``get_voices`` waits for the cached voices and ``speak`` waits for
+    the engine to be ready, then only queues an utterance.
 
     ``speak`` is serialized: each utterance applies the rate and (optional)
     per-utterance voice, then waits for ``finished-utterance`` before the next
@@ -32,17 +37,36 @@ class SpeechEngine:
         self.engine = None
         self._started = False
         self._voice = None
+        self._voices = []
         self._speak_lock = threading.RLock()
         self._done = threading.Event()
+        self._engine_ready = threading.Event()
+        self._voices_ready = threading.Event()
+        self._loop_requested = False
 
     def _ensure_engine(self):
+        """Create + wire the engine. MUST run on the dedicated loop thread.
+
+        The tkinter UI and MCP server must NOT call this directly — they go
+        through ``_await_engine``/``get_voices`` so the COM engine is only ever
+        created on the thread that also pumps its run loop.
+        """
         if self.engine is None:
-            self.engine = self._init()
-            self.engine.connect('started-utterance', self._on_start)
-            self.engine.connect('started-word', self._on_word)
-            self.engine.connect('finished-utterance', self._on_end)
-            self.engine.connect('finished-utterance', self._mark_done)
+            engine = self._init()
+            engine.connect('started-utterance', self._on_start)
+            engine.connect('started-word', self._on_word)
+            engine.connect('finished-utterance', self._on_end)
+            engine.connect('finished-utterance', self._mark_done)
+            self.engine = engine
+            self._engine_ready.set()
         return self.engine
+
+    def _load_voices(self):
+        """Enumerate installed voices into the cache (on the loop thread)."""
+        engine = self._ensure_engine()
+        self._voices = [(voice.id, voice.name) for voice in engine.getProperty('voices')]
+        self._voices_ready.set()
+        return self._voices
 
     def _mark_done(self, name, completed):
         self._done.set()
@@ -53,6 +77,19 @@ class SpeechEngine:
         if chosen is not None:
             self.engine.setProperty('voice', chosen)
 
+    def _await_engine(self):
+        """Return the engine, waiting for the loop thread to build it.
+
+        When the run loop has been primed (the normal app path), the engine is
+        created on that thread, so foreign callers must wait for it rather than
+        create their own COM instance on the wrong thread. Without a primed loop
+        (headless/tests), fall back to building it inline.
+        """
+        if self._loop_requested:
+            self._engine_ready.wait(timeout=30)
+            return self.engine
+        return self._ensure_engine()
+
     def speak(self, text, rate, voice=None, block=True):
         """Speak one utterance, optionally with a per-call ``voice`` id.
 
@@ -61,20 +98,32 @@ class SpeechEngine:
         a daemon/worker thread — never the tkinter main thread.
         """
         with self._speak_lock:
-            engine = self._ensure_engine()
+            engine = self._await_engine()
             self._apply_properties(rate, voice)
             self._done.clear()
             engine.say(text)
             if block:
                 self._done.wait(timeout=600)
 
-    def ensure_loop(self, rate):
-        """Start the engine + run loop once WITHOUT speaking.
+    def prime_async(self, rate):
+        """Create the engine and start its run loop on a dedicated daemon thread.
 
-        ``startLoop`` blocks, so call this on a daemon thread. No-op if the loop
-        is already running.
+        Call this once at startup BEFORE ``get_voices``/``speak``. The COM engine
+        is created AND pumped on this one thread so its callbacks never fire on a
+        thread without a Python thread state (which crashes the process).
         """
+        self._loop_requested = True
+        threading.Thread(target=self.ensure_loop, args=(rate,), daemon=True).start()
+
+    def ensure_loop(self, rate):
+        """Build the engine, cache voices, and start the run loop once.
+
+        ``startLoop`` blocks, so this runs on the dedicated daemon thread spawned
+        by ``prime_async``. No-op restart if the loop is already running.
+        """
+        self._loop_requested = True
         engine = self._ensure_engine()
+        self._load_voices()
         if not self._started:
             self._apply_properties(rate, None)
             self._started = True
@@ -83,17 +132,22 @@ class SpeechEngine:
     def get_voices(self):
         """Return ``[(id, name), ...]`` for the voices installed on this system.
 
-        Creates the engine if needed (without starting the run loop), so it is
-        safe to call at startup to populate a voice picker.
+        Returns the voices enumerated on the loop thread (waiting for them when
+        the loop has been primed), so the COM engine is never created on the
+        calling thread.
         """
-        engine = self._ensure_engine()
-        return [(voice.id, voice.name) for voice in engine.getProperty('voices')]
+        if self._loop_requested:
+            self._voices_ready.wait(timeout=30)
+            return list(self._voices)
+        return list(self._load_voices())
 
     def set_voice(self, voice_id):
-        """Select the default voice used when ``speak`` is called without one."""
+        """Select the default voice used when ``speak`` is called without one.
+
+        Store-only: the voice is applied per-utterance in ``_apply_properties``
+        so the COM engine is never touched from the tkinter main thread.
+        """
         self._voice = voice_id
-        if self.engine is not None:
-            self.engine.setProperty('voice', voice_id)
 
     def stop(self):
         if self.engine is not None:

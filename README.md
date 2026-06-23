@@ -91,3 +91,30 @@ python mcp_server.py
 The build uses PyInstaller (see SpeedReader.spec). For background on the bootloader fix: https://github.com/pyinstaller/pyinstaller/issues/3268
 
 pyinstaller --clean --onefile --windowed SpeedReader.spec
+
+
+# Prompt other agents to use your local agent
+```
+## Speak via the SpeedReader MCP
+
+A local MCP server named `speedreader` exposes voice tools. Use them to READ
+ALOUD every task-completion summary AND every clarifying question you ask me.
+
+Rules (follow exactly):
+1. ONCE per session, reserve a voice: call `claim_voice(agent="<this-repo-folder-name>")`.
+   Use a stable id (the repo folder name) as `agent` — not a random string.
+2. For EVERY summary and EVERY question, call `speak(agent="<same-id>", text="<the message>")`.
+   - Keep `text` to the spoken gist (1–3 sentences), not full code or logs.
+   - Omit `rate` so it uses the WPM set in the SpeedReader UI.
+3. When the task is fully done, call `release_voice(agent="<same-id>")`.
+4. If multiple voices exist and you skip `agent`, `speak` errors — always pass `agent`.
+   To see/pick a voice, call `list_voices` and optionally `claim_voice(agent=..., voice="<name|id>")`.
+
+If the `speedreader` tools are NOT available, do NOT silently skip speaking —
+tell me to enable hosting (set `mcp.enabled: true` in SpeedReader's config.json,
+host 127.0.0.1, then restart the app) so the `speak` tool is reachable, and
+continue the task without speaking until it's on.
+
+REPEAT (high-risk, easy to forget): speak the summary AND every question; claim
+once, speak with that same agent, release at the end.
+```
