@@ -40,7 +40,14 @@ Build a standalone EXE (config in [SpeedReader.spec](SpeedReader.spec)):
 pyinstaller --clean --onefile --windowed SpeedReader.spec
 ```
 
-There are no automated tests; verify changes by running the app and exercising Speak/Stop and the `Ctrl+B` (paste & speak) / `Ctrl+A` (select all) shortcuts.
+GUI-free logic lives in [Core/](Core/) so it can be unit tested (and reused by a future MCP server) without tkinter or audio. Run the tests with:
+
+```pwsh
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+The tests mock `pyttsx3` (see [tests/test_speech_engine.py](tests/test_speech_engine.py)) — they cover our logic, not the external engine. The GUI still has no automated coverage; verify UI changes by running the app and exercising Speak/Stop and the `Ctrl+B` (paste & speak) / `Ctrl+A` (select all) shortcuts.
 
 # Custom Instructions
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models

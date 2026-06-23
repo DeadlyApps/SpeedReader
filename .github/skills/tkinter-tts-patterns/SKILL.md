@@ -30,7 +30,7 @@ description: 'Use when adding or changing tkinter/ttk UI or pyttsx3 text-to-spee
 - Build widgets with manual `grid` using the running `row_index` counter; increment after each row. Don't hardcode rows.
 - Set state: `widget['state'] = NORMAL | DISABLED`. Read state: `widget['state'].__str__() == NORMAL`. Guard new handlers like `speak()`/`stop()` do.
 
-## Verify (no automated tests)
+## Verify
 1. `pip install -r requirements.txt` (`pyttsx3` pinned to `2.71` — do not bump).
-2. `python SpeedReader.py`.
-3. Exercise Speak/Stop, `Ctrl+B` (paste & speak), `Ctrl+A` (select all); confirm the red word tracks audio and the UI stays responsive.
+2. Unit tests cover GUI-free logic in `Core/` (mock `pyttsx3`, do not test the library): `pip install -r requirements-dev.txt` then `python -m pytest -q`.
+3. `python SpeedReader.py` and exercise Speak/Stop, `Ctrl+B` (paste & speak), `Ctrl+A` (select all); confirm the red word tracks audio and the UI stays responsive. The GUI itself has no automated coverage.

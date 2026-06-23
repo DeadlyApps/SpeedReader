@@ -2,14 +2,13 @@ import threading
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
 from tkinter import Text
-import pyttsx3
-from pyttsx3 import engine
-import re
+from Core.speech_engine import SpeechEngine
+from Core.text_processing import preprocess_text, word_window, highlight_indices
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
         ttk.Frame.__init__(self, **kw)
-        self.engine = None
+        self.speech = SpeechEngine(self.onStart, self.onStartWord, self.onEnd)
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
@@ -100,7 +99,7 @@ class MainFrame(ttk.Frame):
 
     def stop(self, event):
         if self.stop_button['state'].__str__() == NORMAL:
-            self.engine.stop()
+            self.speech.stop()
             self.speak_button['state'] = NORMAL
             self.stop_button['state'] = DISABLED
 
@@ -110,18 +109,13 @@ class MainFrame(ttk.Frame):
         print("onStart")
 
     def onStartWord(self, name, location, length):
-        read_trail = 100
-        left_index = location - read_trail
-        if left_index < 0:
-            left_index = 0
-
-        self.spoken_words['text'] = self.spoken_text[left_index:location]
-        self.current_word_label['text'] = self.spoken_text[location:location + length]
-        self.next_words['text'] = self.spoken_text[location + length:location + length + read_trail]
+        spoken, current, next_ = word_window(self.spoken_text, location, length)
+        self.spoken_words['text'] = spoken
+        self.current_word_label['text'] = current
+        self.next_words['text'] = next_
         if self.highlight_index1 is not None:
             self.text_area.tag_remove(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
-        self.highlight_index1 = "1.{}".format(location)
-        self.highlight_index2 = "1.{}".format(location + length)
+        self.highlight_index1, self.highlight_index2 = highlight_indices(location, length)
         self.text_area.see(self.highlight_index1)
         self.text_area.tag_add(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
 
@@ -137,9 +131,7 @@ class MainFrame(ttk.Frame):
 
     def speak(self, event):
         if self.speak_button['state'].__str__() == NORMAL:
-            text = self.text_area.get("1.0", END).replace('\n', ' ')
-            text = re.sub(r'http\S+', ' [URL] ', text)
-            self.spoken_text = text
+            self.spoken_text = preprocess_text(self.text_area.get("1.0", END))
             self.text_area.delete("1.0", END)
             self.text_area.insert(END, self.spoken_text)
 
@@ -150,18 +142,7 @@ class MainFrame(ttk.Frame):
             self.thread.start()
 
     def speak_on_thread(self, speech_speed, spoken_text):
-
-        if self.engine is None:
-            self.engine = pyttsx3.init()
-            self.engine.setProperty('rate', speech_speed)
-            self.engine.connect('started-utterance', self.onStart)
-            self.engine.connect('started-word', self.onStartWord)
-            self.engine.connect('finished-utterance', self.onEnd)
-            self.engine.say(spoken_text)
-            self.engine.startLoop()
-        else:
-            self.engine.setProperty('rate', speech_speed)
-            self.engine.say(spoken_text)
+        self.speech.speak(spoken_text, speech_speed)
 
 
 TAG_CURRENT_WORD = "current word"
