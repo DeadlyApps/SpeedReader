@@ -63,6 +63,7 @@ python -m pytest -q
 The tests mock `pyttsx3` (see [tests/test_speech_engine.py](tests/test_speech_engine.py)) — they cover our logic, not the external engine. The GUI still has no automated coverage; verify UI changes by running the app and exercising Speak/Stop and the `Ctrl+B` (paste & speak) / `Ctrl+A` (select all) shortcuts.
 
 # Custom Instructions
+- ALWAYS dogfood your own MCP server. Whenever you need to ask me a question or finish a task, use the MCP to read it out loud. If the MCP is not available, remind me to turn it on for dogfooding purposes.
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
 - list skills you used in completing the prompt
 - ALWAYS create (not just suggest) any skill you wished you had before starting the prompt — create the missing `SKILL.md` under `.github/skills/<name>/` before finishing, then list what you created
