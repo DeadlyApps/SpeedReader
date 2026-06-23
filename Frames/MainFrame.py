@@ -12,6 +12,7 @@ class MainFrame(ttk.Frame):
         ttk.Frame.__init__(self, **kw)
         self.speech = SpeechEngine(self.onStart, self.onStartWord, self.onEnd)
         self.speak_service = SpeakService(rate=500, speak_fn=self.speak_external)
+        self.voices = self.speech.get_voices()
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
@@ -66,12 +67,27 @@ class MainFrame(ttk.Frame):
 
         row_index += 1
 
-        self.speed_label = ttk.Label(self, text="Speed: ")
-        self.speed_label.grid(row=row_index, column=1, pady=10)
+        self.settings_frame = ttk.Frame(self)
+        self.settings_frame.grid(row=row_index, column=0, columnspan=4, pady=10)
+
+        self.speed_label = ttk.Label(self.settings_frame, text="Speed: ")
+        self.speed_label.grid(row=0, column=0, padx=(0, 5))
         self.speed_var = StringVar(value="500")
-        self.speed_entry = ttk.Entry(self, textvariable=self.speed_var)
-        self.speed_entry.grid(row=row_index, column=2, pady=10)
+        self.speed_entry = ttk.Entry(self.settings_frame, width=6, textvariable=self.speed_var)
+        self.speed_entry.grid(row=0, column=1, padx=(0, 20))
         self.speed_var.trace_add("write", self.on_rate_changed)
+
+        self.voice_label = ttk.Label(self.settings_frame, text="Voice: ")
+        self.voice_label.grid(row=0, column=2, padx=(0, 5))
+        self.voice_var = StringVar()
+        self.voice_combo = ttk.Combobox(
+            self.settings_frame, textvariable=self.voice_var, state="readonly",
+            width=30, values=[name for _, name in self.voices])
+        self.voice_combo.grid(row=0, column=3)
+        self.voice_combo.bind("<<ComboboxSelected>>", self.on_voice_changed)
+        if self.voices:
+            self.voice_var.set(self.voices[0][1])
+            self.speech.set_voice(self.voices[0][0])
         row_index += 1
 
 
@@ -119,7 +135,14 @@ class MainFrame(ttk.Frame):
             self.speak_service.set_rate(int(self.speed_var.get()))
         except ValueError:
             pass
-        
+
+    def on_voice_changed(self, event=None):
+        # Apply the picked voice to the shared engine (used by the GUI and MCP).
+        selected = self.voice_var.get()
+        for voice_id, voice_name in self.voices:
+            if voice_name == selected:
+                self.speech.set_voice(voice_id)
+                break
 
     def paste_and_speak(self, event):
         self.stop(event)

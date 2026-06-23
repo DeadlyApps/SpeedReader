@@ -74,3 +74,38 @@ def test_speak_after_ensure_loop_reuses_engine_without_second_startloop():
     fake_engine.startLoop.assert_called_once()  # loop is not started again
     fake_engine.say.assert_called_once_with('hello')
 
+
+def test_get_voices_returns_id_name_pairs_without_starting_loop():
+    speech, init, fake_engine = make_engine()
+    v1 = MagicMock(id='id-1')
+    v1.name = 'Alice'
+    v2 = MagicMock(id='id-2')
+    v2.name = 'Bob'
+    fake_engine.getProperty.return_value = [v1, v2]
+
+    voices = speech.get_voices()
+
+    assert voices == [('id-1', 'Alice'), ('id-2', 'Bob')]
+    fake_engine.getProperty.assert_called_once_with('voices')
+    fake_engine.startLoop.assert_not_called()
+
+
+def test_set_voice_is_applied_on_each_utterance():
+    speech, init, fake_engine = make_engine()
+
+    speech.set_voice('id-2')
+    speech.speak('hi', 400)
+
+    fake_engine.setProperty.assert_any_call('voice', 'id-2')
+    fake_engine.setProperty.assert_any_call('rate', 400)
+
+
+def test_set_voice_before_engine_exists_applies_after_first_speak():
+    speech, init, fake_engine = make_engine()
+
+    speech.set_voice('id-9')  # engine not created yet
+    speech.speak('hi', 500)
+
+    fake_engine.setProperty.assert_any_call('voice', 'id-9')
+
+

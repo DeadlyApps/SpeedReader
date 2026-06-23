@@ -13,13 +13,18 @@ Tested with Python 3.14 (originally developed on 3.7)
 install requirements.txt
 pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3/issues/78
 
+## Controls
+- **Speed** — words per minute (start low, e.g. 200, and work up to 500).
+- **Voice** — pick from the text-to-speech voices installed on your system; the choice applies to both your reading and any AI agent speaking through the MCP server.
+- Shortcuts: `Ctrl+B` paste & speak, `Ctrl+A` select all.
+
 ## MCP server (let AI agents speak through SpeedReader)
 SpeedReader ships a [Model Context Protocol](https://modelcontextprotocol.io) server that exposes a single `speak` tool, so an AI agent (e.g. in VS Code) can read text aloud on your machine using the same voice — and the same words-per-minute — you've set in the app.
 
 There are two ways to run it:
 
 ### Hosted by the running app (recommended)
-This is the main use case: you keep SpeedReader open to read your own text, and agents speak through the very same window. It also means agent speech uses the **rate currently set in the UI**.
+This is the main use case: you keep SpeedReader open to read your own text, and agents speak through the very same window. It also means agent speech uses the **rate and voice currently set in the UI**.
 
 1. Enable hosting in `config.json` at the repo root (hosting is **off by default**):
 

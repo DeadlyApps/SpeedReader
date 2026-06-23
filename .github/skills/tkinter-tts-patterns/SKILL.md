@@ -15,10 +15,11 @@ description: 'Use when adding or changing tkinter/ttk UI or pyttsx3 text-to-spee
 - All UI updates come from `pyttsx3` callbacks, not polling.
 - REPEAT: keep the thread `daemon = True` so it dies with the app.
 
-## Engine lifecycle (init ONCE, reuse)
-- First `speak`: `pyttsx3.init()`, `connect()` the three callbacks, then `engine.startLoop()`.
-- Every later `speak`: ONLY `setProperty('rate', ...)` then `say(...)`.
-- NEVER re-init the engine and NEVER call `startLoop()` a second time. REPEAT: `startLoop()` is called exactly once for the app's lifetime.
+## Engine lifecycle (create ONCE, start loop ONCE)
+- The engine is created once (`pyttsx3.init()` + `connect()` the three callbacks) and reused. Creating the engine is SEPARATE from starting the run loop, so voices can be listed before any speech (`get_voices()` creates the engine but does NOT start the loop).
+- The run loop (`startLoop()`) is started AT MOST ONCE, guarded by the `_started` flag — by the first `speak()` or by `ensure_loop()` (MCP in-process priming), whichever comes first. Every later `speak` only applies properties + `say(...)`.
+- NEVER re-init the engine and NEVER call `startLoop()` a second time. REPEAT: `startLoop()` runs exactly once for the app's lifetime; `_started` is what prevents a second call.
+- Voice: `set_voice(voice_id)` records the choice and applies `setProperty('voice', ...)`; the voice (and rate) are re-applied on EVERY utterance so the GUI and the MCP server speak with the selected voice. REPEAT: apply rate AND voice each `say`, not just on first speak.
 - Callback → handler map: `started-utterance`→`onStart`, `started-word`→`onStartWord`, `finished-utterance`→`onEnd`.
 
 ## Word highlighting
