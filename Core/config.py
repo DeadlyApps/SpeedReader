@@ -1,6 +1,6 @@
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -10,6 +10,7 @@ class McpConfig:
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8765
+    voices: list = field(default_factory=list)  # enabled voice IDs; empty = all
 
 
 def load_mcp_config(path=None):
@@ -35,4 +36,23 @@ def load_mcp_config(path=None):
             cfg.host = str(mcp["host"])
         if "port" in mcp:
             cfg.port = int(mcp["port"])
+        if "voices" in mcp and isinstance(mcp["voices"], list):
+            cfg.voices = [str(v) for v in mcp["voices"]]
     return cfg
+
+
+def save_enabled_voices(voice_ids, path=None):
+    """Persist the set of MCP-enabled voice IDs to the config file.
+
+    Preserves any existing config; writes ``mcp.voices``. Used by the GUI's
+    Voice Settings dialog.
+    """
+    path = path or os.environ.get("SPEEDREADER_CONFIG") or "config.json"
+    data = {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle) or {}
+    data.setdefault("mcp", {})
+    data["mcp"]["voices"] = list(voice_ids)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=4)

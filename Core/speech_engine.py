@@ -1,12 +1,22 @@
+import threading
+
+
 class SpeechEngine:
     """GUI-free wrapper around the pyttsx3 engine lifecycle.
 
     The engine is created once and reused. Creating the engine (and connecting
-    callbacks) is separated from starting the run loop so voices can be
-    enumerated before any speech. ``startLoop()`` is started at most once,
-    guarded by ``_started``, and never called twice. The selected voice (if any)
-    is applied on every utterance so both the GUI and the MCP server speak with
-    it.
+    callbacks) is separate from starting the run loop: ``get_voices`` can create
+    it early to populate a voice picker, and the loop is started exactly once by
+    ``ensure_loop`` (never by ``speak``). pyttsx3 allows only one run loop per
+    process, so ``ensure_loop`` must be running before any ``speak`` and is
+    primed on a daemon thread at startup.
+
+    ``speak`` is serialized: each utterance applies the rate and (optional)
+    per-utterance voice, then waits for ``finished-utterance`` before the next
+    one runs. This is required because pyttsx3 applies properties at processing
+    time, so different agents' voices would otherwise bleed across queued
+    utterances. Callers run ``speak`` on a worker/daemon thread, never the
+    tkinter main thread.
 
     ``init`` is injectable so the lifecycle can be unit tested without pyttsx3.
     """
@@ -22,6 +32,8 @@ class SpeechEngine:
         self.engine = None
         self._started = False
         self._voice = None
+        self._speak_lock = threading.RLock()
+        self._done = threading.Event()
 
     def _ensure_engine(self):
         if self.engine is None:
@@ -29,32 +41,42 @@ class SpeechEngine:
             self.engine.connect('started-utterance', self._on_start)
             self.engine.connect('started-word', self._on_word)
             self.engine.connect('finished-utterance', self._on_end)
+            self.engine.connect('finished-utterance', self._mark_done)
         return self.engine
 
-    def _apply_properties(self, rate):
-        self.engine.setProperty('rate', rate)
-        if self._voice is not None:
-            self.engine.setProperty('voice', self._voice)
+    def _mark_done(self, name, completed):
+        self._done.set()
 
-    def speak(self, text, rate):
-        engine = self._ensure_engine()
-        self._apply_properties(rate)
-        engine.say(text)
-        if not self._started:
-            self._started = True
-            engine.startLoop()
+    def _apply_properties(self, rate, voice):
+        self.engine.setProperty('rate', rate)
+        chosen = voice if voice is not None else self._voice
+        if chosen is not None:
+            self.engine.setProperty('voice', chosen)
+
+    def speak(self, text, rate, voice=None, block=True):
+        """Speak one utterance, optionally with a per-call ``voice`` id.
+
+        Serialized via a lock; when ``block`` (default) it waits for the
+        utterance to finish so the next speaker's voice cannot bleed in. Run on
+        a daemon/worker thread — never the tkinter main thread.
+        """
+        with self._speak_lock:
+            engine = self._ensure_engine()
+            self._apply_properties(rate, voice)
+            self._done.clear()
+            engine.say(text)
+            if block:
+                self._done.wait(timeout=600)
 
     def ensure_loop(self, rate):
         """Start the engine + run loop once WITHOUT speaking.
 
-        pyttsx3 allows only one run loop per process, so when speech is hosted
-        in-process (e.g. the MCP server alongside the GUI) the loop must already
-        be running before any ``say``. ``startLoop`` blocks, so call this on a
-        daemon thread. No-op if the loop is already running.
+        ``startLoop`` blocks, so call this on a daemon thread. No-op if the loop
+        is already running.
         """
         engine = self._ensure_engine()
         if not self._started:
-            self._apply_properties(rate)
+            self._apply_properties(rate, None)
             self._started = True
             engine.startLoop()
 
@@ -68,7 +90,7 @@ class SpeechEngine:
         return [(voice.id, voice.name) for voice in engine.getProperty('voices')]
 
     def set_voice(self, voice_id):
-        """Select the voice used for subsequent speech (GUI and MCP)."""
+        """Select the default voice used when ``speak`` is called without one."""
         self._voice = voice_id
         if self.engine is not None:
             self.engine.setProperty('voice', voice_id)

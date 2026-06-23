@@ -22,11 +22,12 @@ class SpeakService:
     def set_rate(self, rate):
         self._rate = int(rate)
 
-    def speak(self, text, rate=None):
+    def speak(self, text, rate=None, voice=None):
         """Speak ``text`` aloud, using the UI rate unless ``rate`` overrides it.
 
-        Returns the rate actually used.
+        ``voice`` is an optional per-call voice id (used by the MCP server to
+        speak in an agent's claimed voice). Returns the rate actually used.
         """
         used = self._rate if rate is None else int(rate)
-        self._speak_fn(preprocess_text(text), used)
+        self._speak_fn(preprocess_text(text), used, voice)
         return used

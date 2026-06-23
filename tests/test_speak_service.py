@@ -10,7 +10,7 @@ def test_speak_uses_current_rate_and_preprocesses():
     used = service.speak('hello\nworld')
 
     assert used == 500
-    speak_fn.assert_called_once_with('hello world', 500)
+    speak_fn.assert_called_once_with('hello world', 500, None)
 
 
 def test_set_rate_changes_the_rate_used():
@@ -21,7 +21,7 @@ def test_set_rate_changes_the_rate_used():
     used = service.speak('hi')
 
     assert used == 300
-    speak_fn.assert_called_once_with('hi', 300)
+    speak_fn.assert_called_once_with('hi', 300, None)
 
 
 def test_explicit_rate_overrides_ui_rate():
@@ -31,4 +31,13 @@ def test_explicit_rate_overrides_ui_rate():
     used = service.speak('hi', rate=120)
 
     assert used == 120
-    speak_fn.assert_called_once_with('hi', 120)
+    speak_fn.assert_called_once_with('hi', 120, None)
+
+
+def test_voice_is_passed_through_to_speak_fn():
+    speak_fn = MagicMock()
+    service = SpeakService(rate=500, speak_fn=speak_fn)
+
+    service.speak('hi', voice='voice-id-1')
+
+    speak_fn.assert_called_once_with('hi', 500, 'voice-id-1')

@@ -1,4 +1,4 @@
-def speak_blocking(text, rate, init=None):
+def speak_blocking(text, rate, voice=None, init=None):
     """Speak text aloud and block until finished (headless, no GUI).
 
     A fresh pyttsx3 engine is created per call and driven with ``runAndWait()``,
@@ -11,5 +11,7 @@ def speak_blocking(text, rate, init=None):
         init = pyttsx3.init
     engine = init()
     engine.setProperty('rate', rate)
+    if voice is not None:
+        engine.setProperty('voice', voice)
     engine.say(text)
     engine.runAndWait()

@@ -1,6 +1,5 @@
 from tkinter import Tk
 from tkinter.constants import N, S, E, W
-import threading
 from Frames.MainFrame import MainFrame
 from Core.config import load_mcp_config
 
@@ -18,15 +17,12 @@ class SpeedReaderController(Tk):
     def maybe_host_mcp(self, main_frame):
         # Host the MCP server in-process only if the user opted in via config.
         # Imported lazily so the GUI doesn't require the mcp package otherwise.
+        # MainFrame already primes the shared engine's single run loop, so agents
+        # can speak as soon as the server is up.
         config = load_mcp_config()
         if not config.enabled:
             return
-        # Start the shared engine's single run loop up front (on a daemon thread,
-        # since startLoop blocks) so agents can speak even before the user does.
-        threading.Thread(
-            target=main_frame.speech.ensure_loop,
-            args=(main_frame.speak_service.rate,),
-            daemon=True,
-        ).start()
         import mcp_server
-        mcp_server.start_http_in_thread(main_frame.speak_service, config.host, config.port)
+        mcp_server.start_http_in_thread(
+            main_frame.speak_service, main_frame.voice_registry,
+            config.host, config.port)

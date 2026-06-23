@@ -10,10 +10,10 @@ def make_engine():
     return speech, init, fake_engine
 
 
-def test_first_speak_initializes_connects_and_starts_loop_once():
+def test_first_speak_initializes_connects_and_says_without_starting_loop():
     speech, init, fake_engine = make_engine()
 
-    speech.speak('hello', 500)
+    speech.speak('hello', 500, block=False)
 
     init.assert_called_once_with()
     fake_engine.setProperty.assert_called_once_with('rate', 500)
@@ -21,17 +21,17 @@ def test_first_speak_initializes_connects_and_starts_loop_once():
     fake_engine.connect.assert_any_call('started-word', 'W')
     fake_engine.connect.assert_any_call('finished-utterance', 'E')
     fake_engine.say.assert_called_once_with('hello')
-    fake_engine.startLoop.assert_called_once_with()
+    fake_engine.startLoop.assert_not_called()  # only ensure_loop starts the loop
 
 
-def test_second_speak_reuses_engine_without_reinit_or_second_startloop():
+def test_second_speak_reuses_engine_without_reinit():
     speech, init, fake_engine = make_engine()
 
-    speech.speak('first', 500)
-    speech.speak('second', 300)
+    speech.speak('first', 500, block=False)
+    speech.speak('second', 300, block=False)
 
     init.assert_called_once()  # engine is not re-initialized
-    fake_engine.startLoop.assert_called_once()  # loop is not started again
+    fake_engine.startLoop.assert_not_called()  # speak never starts the loop
     assert fake_engine.setProperty.call_args_list == [call('rate', 500), call('rate', 300)]
     assert fake_engine.say.call_args_list == [call('first'), call('second')]
 
@@ -48,7 +48,7 @@ def test_stop_before_any_speak_is_a_noop():
 def test_stop_after_speak_stops_the_engine():
     speech, init, fake_engine = make_engine()
 
-    speech.speak('hi', 500)
+    speech.speak('hi', 500, block=False)
     speech.stop()
 
     fake_engine.stop.assert_called_once_with()
@@ -68,7 +68,7 @@ def test_speak_after_ensure_loop_reuses_engine_without_second_startloop():
     speech, init, fake_engine = make_engine()
 
     speech.ensure_loop(500)
-    speech.speak('hello', 300)
+    speech.speak('hello', 300, block=False)
 
     init.assert_called_once()  # engine is not re-initialized
     fake_engine.startLoop.assert_called_once()  # loop is not started again
@@ -94,7 +94,7 @@ def test_set_voice_is_applied_on_each_utterance():
     speech, init, fake_engine = make_engine()
 
     speech.set_voice('id-2')
-    speech.speak('hi', 400)
+    speech.speak('hi', 400, block=False)
 
     fake_engine.setProperty.assert_any_call('voice', 'id-2')
     fake_engine.setProperty.assert_any_call('rate', 400)
@@ -104,8 +104,17 @@ def test_set_voice_before_engine_exists_applies_after_first_speak():
     speech, init, fake_engine = make_engine()
 
     speech.set_voice('id-9')  # engine not created yet
-    speech.speak('hi', 500)
+    speech.speak('hi', 500, block=False)
 
     fake_engine.setProperty.assert_any_call('voice', 'id-9')
+
+
+def test_per_utterance_voice_overrides_default_voice():
+    speech, init, fake_engine = make_engine()
+
+    speech.set_voice('default-voice')
+    speech.speak('hi', 500, voice='agent-voice', block=False)
+
+    fake_engine.setProperty.assert_any_call('voice', 'agent-voice')
 
 

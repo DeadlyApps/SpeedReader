@@ -2,9 +2,11 @@ import threading
 import webbrowser
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
-from tkinter import Text, StringVar
+from tkinter import Text, StringVar, BooleanVar, Toplevel
 from Core.speech_engine import SpeechEngine
 from Core.speak_service import SpeakService
+from Core.voice_registry import VoiceRegistry
+from Core.config import load_mcp_config, save_enabled_voices
 from Core.text_processing import preprocess_text, word_window, highlight_indices
 
 class MainFrame(ttk.Frame):
@@ -13,10 +15,26 @@ class MainFrame(ttk.Frame):
         self.speech = SpeechEngine(self.onStart, self.onStartWord, self.onEnd)
         self.speak_service = SpeakService(rate=500, speak_fn=self.speak_external)
         self.voices = self.speech.get_voices()
+        self.voice_registry = self._build_voice_registry()
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
         self.build_frame_content(kw)
+        # Prime the single pyttsx3 run loop on a daemon thread so every speak
+        # (GUI and MCP) only has to queue + wait, never start the loop.
+        threading.Thread(target=self.speech.ensure_loop, args=(500,), daemon=True).start()
+
+    def _build_voice_registry(self):
+        """Build the agent voice registry from system voices + saved config.
+
+        When the config lists no enabled voices, all system voices are enabled.
+        """
+        cfg = load_mcp_config()
+        if cfg.voices:
+            enabled = [(vid, name) for vid, name in self.voices if vid in cfg.voices]
+        else:
+            enabled = list(self.voices)
+        return VoiceRegistry(enabled=enabled)
 
     def build_frame_content(self, kw):
 
@@ -88,6 +106,12 @@ class MainFrame(ttk.Frame):
         if self.voices:
             self.voice_var.set(self.voices[0][1])
             self.speech.set_voice(self.voices[0][0])
+            # Reserve the user's voice so agents claim the other voices first.
+            self.voice_registry.set_user_voice(self.voices[0][0])
+
+        self.voice_settings_button = ttk.Button(
+            self.settings_frame, text="Voice Settings…", command=self.open_voice_settings)
+        self.voice_settings_button.grid(row=0, column=4, padx=(20, 0))
         row_index += 1
 
 
@@ -129,6 +153,34 @@ class MainFrame(ttk.Frame):
     def open_contribute(self):
         webbrowser.open_new_tab(GITHUB_URL)
 
+    def open_voice_settings(self):
+        """Open a dialog to enable/disable which system voices agents may use."""
+        enabled_ids = {vid for vid, _ in self.voice_registry.enabled()}
+        dialog = Toplevel(self)
+        dialog.title("Voice Settings")
+        dialog.transient(self.master)
+        ttk.Label(
+            dialog, text="Voices agents may use via the MCP server:"
+        ).grid(row=0, column=0, sticky=W, padx=12, pady=(12, 6))
+
+        vars_by_id = {}
+        for i, (vid, name) in enumerate(self.voices, start=1):
+            var = BooleanVar(value=vid in enabled_ids)
+            vars_by_id[vid] = var
+            ttk.Checkbutton(dialog, text=name, variable=var).grid(
+                row=i, column=0, sticky=W, padx=18)
+
+        def save():
+            selected = [(vid, name) for vid, name in self.voices if vars_by_id[vid].get()]
+            self.voice_registry.set_enabled(selected)
+            save_enabled_voices([vid for vid, _ in selected])
+            dialog.destroy()
+
+        buttons = ttk.Frame(dialog)
+        buttons.grid(row=len(self.voices) + 1, column=0, sticky=E, padx=12, pady=12)
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).grid(row=0, column=0, padx=(0, 6))
+        ttk.Button(buttons, text="Save", command=save).grid(row=0, column=1)
+
     def on_rate_changed(self, *args):
         # Keep the shared service rate in sync so MCP agents speak at the UI rate.
         try:
@@ -142,6 +194,8 @@ class MainFrame(ttk.Frame):
         for voice_id, voice_name in self.voices:
             if voice_name == selected:
                 self.speech.set_voice(voice_id)
+                # Re-reserve the user's voice so agents keep avoiding it.
+                self.voice_registry.set_user_voice(voice_id)
                 break
 
     def paste_and_speak(self, event):
@@ -200,16 +254,18 @@ class MainFrame(ttk.Frame):
     def speak_on_thread(self, speech_speed, spoken_text):
         self.speech.speak(spoken_text, speech_speed)
 
-    def speak_external(self, text, rate):
+    def speak_external(self, text, rate, voice=None):
         # Entry point for MCP agent speech (called from the server thread).
-        # Marshal UI updates onto the tkinter main thread; the (already running)
-        # shared engine loop then speaks and drives the highlight callbacks.
-        def run():
-            self.spoken_text = text
-            self.text_area.delete("1.0", END)
-            self.text_area.insert(END, text)
-            self.speech.speak(text, rate)
-        self.after(0, run)
+        # Update the UI on the tkinter main thread, but run the BLOCKING speak on
+        # this server thread (never inside `after`, which would freeze the UI).
+        # Blocking serializes per-utterance voices so agents don't bleed voices.
+        self.after(0, lambda: self._render_external(text))
+        self.speech.speak(text, rate, voice=voice, block=True)
+
+    def _render_external(self, text):
+        self.spoken_text = text
+        self.text_area.delete("1.0", END)
+        self.text_area.insert(END, text)
 
 
 TAG_CURRENT_WORD = "current word"

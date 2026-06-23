@@ -29,13 +29,38 @@ Locally hosted MCP server that lets agents read text aloud on the host. See [mcp
 
 ## Architecture (do NOT re-couple to the GUI)
 - The server MUST reuse [Core/](../../../Core/) — never import tkinter or the GUI. Text is normalized with `Core.text_processing.preprocess_text` (done inside `SpeakService.speak`).
-- Speech uses **`Core.speech.speak_blocking`** (a fresh engine + `runAndWait()` per call), NOT the GUI's long-lived `startLoop` engine in `Core/speech_engine.py`. REPEAT: do not call `startLoop()` from the server — that is the GUI callback model and will hang a headless request.
+- `build_mcp(service, registry, host, port)` and `start_http_in_thread(service, registry, host, port)` take a `Core.voice_registry.VoiceRegistry` so the GUI and server share one claim state.
+- Speech goes through whatever `speak_fn` the `SpeakService` was built with:
+  - **Hosted by the GUI**: `speak_fn = MainFrame.speak_external`, which routes through the GUI's single long-lived `startLoop` engine (so the user and agents share one window/loop). REPEAT: when hosted, agent speech does NOT use `speak_blocking`.
+  - **Standalone**: the default `speak_fn = Core.speech.speak_blocking` (a fresh engine + `runAndWait()` per call).
+- REPEAT: never call `startLoop()` from the server module — that is the GUI callback model and would conflict with the single-loop-per-process rule.
 
 ## Tool contract
-- `speak(text: str, rate: int | None = None) -> str` reads text aloud (UI rate when `rate` is omitted) and returns a short confirmation. Keep tool signatures typed and docstring'd — FastMCP turns the docstring/types into the tool schema agents see.
+- `speak(text, agent=None, voice=None, rate=None) -> str`: reads text aloud (UI rate when `rate` omitted). Voice is resolved by `registry.resolve_for_speak(agent, voice)`: explicit `voice` (name/id) > the `agent`'s reserved voice. REPEAT: with >1 enabled voice and NO reserved `agent` and NO explicit `voice`, it RAISES a `ValueError` telling the agent to `claim_voice` first (the handshake is enforced, not silently defaulted). Sole enabled voice = used without a reservation; empty registry = engine default.
+- `list_voices() -> list`: `[{id, name, claimed_by}]` for enabled voices (the user's reserved voice shows `"user"`).
+- `claim_voice(agent=None, voice=None) -> dict`: reserves a voice; raises `ValueError` (surfaced to the agent) when voices are exhausted and no `agent` is given. See *Per-agent voices*.
+- `release_voice(agent) -> str`: frees the agent's voice.
+- Keep tool signatures typed and docstring'd — FastMCP turns the docstring/types into the tool schema agents see.
+
+## Agentic handshake (the intended flow — be repetitive)
+1. (optional) `list_voices()` to discover enabled voices + holders.
+2. `claim_voice(agent="<repo folder or current task>")` to RESERVE a voice (idempotent; returns `{id, name, shared, reused}`).
+3. `speak(text, agent="<same id>")` to read in that reserved voice.
+4. (optional) `release_voice(agent)` when done to free the pool.
+- REPEAT: `speak` enforces step 2 — without a reservation (or explicit `voice`) it errors with guidance. Escape hatches: explicit `voice="..."` for one-offs, and a single enabled voice needs no reservation.
+
+## Per-agent voices (claim/exhaustion model — HIGH-RISK, be repetitive)
+- `Core.voice_registry.VoiceRegistry` (GUI-free, thread-safe) tracks enabled voices + claims. The user enables voices in the GUI Voice Settings; agents claim them via MCP.
+- The GUI reserves the user's dropdown voice via `registry.set_user_voice(...)` (at startup and on dropdown change). Agents AVOID the user's reserved voice and claim other voices first. REPEAT: the user's voice is handed to an agent ONLY when it is the sole enabled voice (`only_voice`).
+- Claims are EXCLUSIVE while unused (non-user) voices remain. `claim_voice()` hands out a free one.
+- When ALL assignable voices are taken, `claim_voice()` WITHOUT an `agent` label raises `ValueError` instructing the agent to retry with an `agent` (repo folder name or current task). REPEAT: the agent label is REQUIRED only on reuse/exhaustion, optional before that.
+- Reuse shares another *agent's* voice (least-shared), NEVER the user's voice — unless the user's voice is the only enabled voice. REPEAT: never auto-assign the user's reserved voice while other voices exist.
+- A named agent's claim is idempotent (same agent → same voice). `set_enabled(...)` drops claims for voices no longer enabled and clears the user reservation if its voice was disabled.
+- Per-utterance voice relies on the engine SERIALIZING speech (see the `tkinter-tts-patterns` skill): each utterance applies its voice and waits for `finished-utterance` so voices don't bleed. REPEAT: do not remove the serialization or per-utterance voices break.
 
 ## Config (opt-in hosting)
-- Hosting is OFF by default. `Core.config.load_mcp_config()` reads `config.json` (or `$SPEEDREADER_CONFIG`): `{"mcp": {"enabled": bool, "host": str, "port": int}}`.
+- Hosting is OFF by default. `Core.config.load_mcp_config()` reads `config.json` (or `$SPEEDREADER_CONFIG`): `{"mcp": {"enabled": bool, "host": str, "port": int, "voices": [ids]}}`.
+- `mcp.voices` is the list of voice IDs enabled for agents (empty/absent = all voices enabled). The GUI's Voice Settings dialog writes it via `Core.config.save_enabled_voices(ids)`. REPEAT: empty list means "all enabled", so the registry is built from all system voices when no voices are configured.
 - The controller lazy-imports `mcp_server` only when `enabled` is true, so the GUI does not hard-require the `mcp` package unless hosting is on. REPEAT: keep that import lazy.
 
 ## Registration

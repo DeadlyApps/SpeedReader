@@ -15,12 +15,19 @@ description: 'Use when adding or changing tkinter/ttk UI or pyttsx3 text-to-spee
 - All UI updates come from `pyttsx3` callbacks, not polling.
 - REPEAT: keep the thread `daemon = True` so it dies with the app.
 
-## Engine lifecycle (create ONCE, start loop ONCE)
-- The engine is created once (`pyttsx3.init()` + `connect()` the three callbacks) and reused. Creating the engine is SEPARATE from starting the run loop, so voices can be listed before any speech (`get_voices()` creates the engine but does NOT start the loop).
-- The run loop (`startLoop()`) is started AT MOST ONCE, guarded by the `_started` flag — by the first `speak()` or by `ensure_loop()` (MCP in-process priming), whichever comes first. Every later `speak` only applies properties + `say(...)`.
-- NEVER re-init the engine and NEVER call `startLoop()` a second time. REPEAT: `startLoop()` runs exactly once for the app's lifetime; `_started` is what prevents a second call.
-- Voice: `set_voice(voice_id)` records the choice and applies `setProperty('voice', ...)`; the voice (and rate) are re-applied on EVERY utterance so the GUI and the MCP server speak with the selected voice. REPEAT: apply rate AND voice each `say`, not just on first speak.
-- Callback → handler map: `started-utterance`→`onStart`, `started-word`→`onStartWord`, `finished-utterance`→`onEnd`.
+## Engine lifecycle (create ONCE, start loop ONCE — only via `ensure_loop`)
+- The engine is created once (`pyttsx3.init()` + `connect()` the callbacks) and reused. Creating the engine is SEPARATE from starting the run loop, so voices can be listed before any speech (`get_voices()` creates the engine but does NOT start the loop).
+- The run loop (`startLoop()`) is started AT MOST ONCE, ONLY by `ensure_loop()`, guarded by `_started`. `MainFrame.__init__` primes it on a **daemon thread** at startup (always — not just when hosting MCP). REPEAT: `speak()` NEVER starts the loop; it only applies properties + `say(...)`. `startLoop()` runs exactly once for the app's lifetime.
+- WHY: `startLoop()` blocks the thread that calls it. If `speak()` started the loop while holding its serialization lock, the lock would never release and every later speak would deadlock. So the loop owner is a dedicated daemon thread, and speakers only queue + wait. REPEAT: never call `startLoop()` under the speak lock.
+- NEVER re-init the engine and NEVER call `startLoop()` a second time. `_started` prevents a second call.
+- Voice: `set_voice(voice_id)` records the DEFAULT voice and applies `setProperty('voice', ...)`. `speak(text, rate, voice=...)` takes an optional PER-UTTERANCE voice that overrides the default for that one utterance (used by the MCP server so different agents speak in different voices). Rate (and the chosen voice) are re-applied on EVERY utterance. REPEAT: apply rate AND the per-utterance/default voice each `say`, not just on first speak.
+- Callback → handler map: `started-utterance`→`onStart`, `started-word`→`onStartWord`, `finished-utterance`→`onEnd`. A SECOND `finished-utterance` subscriber (`_mark_done`) sets a `threading.Event` — pyttsx3 allows multiple callbacks per topic.
+
+## Serialized speak (per-utterance voice — do NOT break)
+- `speak()` holds a lock, applies rate + voice, `say()`s, then (when `block=True`, the default) WAITS on the `finished-utterance` event before returning. This serializes utterances so one agent's voice cannot bleed into the next queued utterance (pyttsx3 applies properties at processing time).
+- Run `speak()` on a daemon/worker thread, NEVER the tkinter main thread (blocking the main thread freezes the UI). The GUI path uses `speak_on_thread`; the MCP path (`speak_external`) updates widgets via `after(...)` but runs the BLOCKING `speak` on the server thread.
+- Tests pass `block=False` so the wait doesn't hang on a mock engine that never fires `finished-utterance`. REPEAT: in unit tests, `speak(..., block=False)`.
+
 
 ## Word highlighting
 - Text is treated as a **single line**: indices are `"1.{char_offset}"`.

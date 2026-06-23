@@ -16,10 +16,16 @@ pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3
 ## Controls
 - **Speed** — words per minute (start low, e.g. 200, and work up to 500).
 - **Voice** — pick from the text-to-speech voices installed on your system; the choice applies to both your reading and any AI agent speaking through the MCP server.
+- **Voice Settings…** — choose which system voices agents are allowed to use (see below). All voices are enabled by default.
 - Shortcuts: `Ctrl+B` paste & speak, `Ctrl+A` select all.
 
 ## MCP server (let AI agents speak through SpeedReader)
-SpeedReader ships a [Model Context Protocol](https://modelcontextprotocol.io) server that exposes a single `speak` tool, so an AI agent (e.g. in VS Code) can read text aloud on your machine using the same voice — and the same words-per-minute — you've set in the app.
+SpeedReader ships a [Model Context Protocol](https://modelcontextprotocol.io) server so an AI agent (e.g. in VS Code) can read text aloud on your machine. It exposes these tools:
+
+- `speak(text, agent?, voice?, rate?)` — read text aloud. Omit `rate` to use the WPM set in the UI; pass the `agent` you claimed with (or an explicit `voice`) to speak in a specific voice, otherwise the UI's selected voice is used.
+- `list_voices()` — list the voices the user enabled for agents, with claim status.
+- `claim_voice(agent?, voice?)` — claim a voice to speak with (see *Per-agent voices* below).
+- `release_voice(agent)` — release a claimed voice.
 
 There are two ways to run it:
 
@@ -45,7 +51,21 @@ This is the main use case: you keep SpeedReader open to read your own text, and 
    }
    ```
 
-The agent now has a `speak(text, rate?)` tool. Omit `rate` to use the WPM set in the UI.
+The agent now has the tools above. Omit `rate` to use the WPM set in the UI.
+
+### Per-agent voices (multiple agents, multiple voices)
+Use **Voice Settings…** in the app to enable/disable which installed voices agents may use; the choice is saved to `config.json` under `mcp.voices`. The voice you pick in the **Voice** dropdown is reserved for you — agents avoid it and claim the other voices first (unless it's the only enabled voice). The agent handshake is:
+
+1. **(optional) discover** — `list_voices()` shows enabled voices and who holds each.
+2. **reserve** — `claim_voice(agent="my-repo")` reserves a voice and returns it. Use a stable identifier (repo folder name or current task). Re-claiming returns the same voice.
+3. **speak** — `speak("hello", agent="my-repo")` reads in your reserved voice.
+4. **(optional) release** — `release_voice("my-repo")` frees it for others.
+
+Rules:
+- `speak` **requires a reservation**: calling it without a reserved `agent` (or an explicit `voice="..."`) is an error that tells the agent to `claim_voice` first — unless only one voice is enabled (then it's used automatically).
+- Claims are exclusive while unused voices remain. When every assignable voice is taken, `claim_voice` **requires an `agent` label** and shares another *agent's* voice (never yours, unless yours is the only voice).
+
+Speech is serialized so each utterance reads in its own voice without bleeding into the next.
 
 ### Standalone (stdio)
 For development or agent-spawned use without the GUI:
