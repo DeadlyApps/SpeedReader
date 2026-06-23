@@ -1,7 +1,7 @@
 import json
 import os
 
-from Core.config import load_mcp_config, save_enabled_voices, McpConfig
+from Core.config import load_mcp_config, save_enabled_voices, save_mcp_port, McpConfig
 
 
 def test_defaults_are_disabled_when_no_file(tmp_path):
@@ -61,3 +61,25 @@ def test_save_enabled_voices_creates_file_when_missing(tmp_path):
 
     data = json.loads(path.read_text())
     assert data["mcp"]["voices"] == ["id-1"]
+
+
+def test_save_mcp_port_persists_and_preserves_config(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"mcp": {"enabled": True, "voices": ["id-1"]}}))
+
+    save_mcp_port(9100, path=str(path))
+
+    data = json.loads(path.read_text())
+    assert data["mcp"]["port"] == 9100
+    assert data["mcp"]["enabled"] is True  # preserved
+    assert data["mcp"]["voices"] == ["id-1"]  # preserved
+    # round-trips through the loader
+    assert load_mcp_config(path=str(path)).port == 9100
+
+
+def test_save_mcp_port_creates_file_when_missing(tmp_path):
+    path = tmp_path / "new.json"
+
+    save_mcp_port(9200, path=str(path))
+
+    assert load_mcp_config(path=str(path)).port == 9200

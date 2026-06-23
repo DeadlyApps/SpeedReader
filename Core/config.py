@@ -41,11 +41,10 @@ def load_mcp_config(path=None):
     return cfg
 
 
-def save_enabled_voices(voice_ids, path=None):
-    """Persist the set of MCP-enabled voice IDs to the config file.
+def _update_mcp_config(updates, path=None):
+    """Merge ``updates`` into the ``mcp`` section of the config file.
 
-    Preserves any existing config; writes ``mcp.voices``. Used by the GUI's
-    Voice Settings dialog.
+    Preserves any existing config and other keys. Returns the resolved path.
     """
     path = path or os.environ.get("SPEEDREADER_CONFIG") or "config.json"
     data = {}
@@ -53,6 +52,25 @@ def save_enabled_voices(voice_ids, path=None):
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle) or {}
     data.setdefault("mcp", {})
-    data["mcp"]["voices"] = list(voice_ids)
+    data["mcp"].update(updates)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=4)
+    return path
+
+
+def save_enabled_voices(voice_ids, path=None):
+    """Persist the set of MCP-enabled voice IDs to the config file.
+
+    Preserves any existing config; writes ``mcp.voices``. Used by the GUI's
+    Voice Settings dialog.
+    """
+    return _update_mcp_config({"voices": list(voice_ids)}, path=path)
+
+
+def save_mcp_port(port, path=None):
+    """Persist the MCP hosting port so it survives across sessions.
+
+    Preserves any existing config; writes ``mcp.port``. Used by the GUI when the
+    user changes the server port and restarts the server.
+    """
+    return _update_mcp_config({"port": int(port)}, path=path)

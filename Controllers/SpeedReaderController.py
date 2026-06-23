@@ -23,6 +23,8 @@ class SpeedReaderController(Tk):
         if not config.enabled:
             return
         import mcp_server
-        mcp_server.start_http_in_thread(
+        # Keep a handle on the frame so the UI can restart the server on a new port.
+        main_frame.mcp_host = mcp_server.start_http_in_thread(
             main_frame.speak_service, main_frame.voice_registry,
             config.host, config.port)
+        main_frame.set_server_port(config.port)

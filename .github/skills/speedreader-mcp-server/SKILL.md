@@ -14,13 +14,20 @@ Locally hosted MCP server that lets agents read text aloud on the host. See [mcp
 
 ## Two run modes (pick the right transport)
 - **Standalone stdio** for dev/agent-spawned use: `python mcp_server.py` -> `mcp.run()`. The client spawns and owns the process.
-- **Hosted by the running GUI over HTTP** so agents connect while the user also uses the app. The GUI calls `mcp_server.start_http_in_thread(service, host, port)` when `config.json` enables it.
+- **Hosted by the running GUI over HTTP** so agents connect while the user also uses the app. The GUI calls `mcp_server.start_http_in_thread(service, registry, host, port)` (which returns a restartable `McpHost`) when `config.json` enables it.
 - HIGH-RISK / REPEAT: an already-running GUI CANNOT host a **stdio** server (stdio = the client spawns/owns the process). To host from the live app you MUST use **HTTP** (`transport="streamable-http"`). Do not "fix" hosting by switching back to stdio.
 
 ## Threaded uvicorn (HIGH-RISK — be careful)
-- `start_http_in_thread` runs `server.run(transport="streamable-http")` on a **daemon `threading.Thread`** so the tkinter mainloop stays responsive.
+- `start_http_in_thread` returns an `McpHost` that serves the FastMCP ASGI app (`server.streamable_http_app()`) via a `uvicorn.Server` we own, on a **daemon `threading.Thread`** so the tkinter mainloop stays responsive.
+- REPEAT: drive uvicorn ourselves (own the `uvicorn.Server`) instead of `FastMCP.run(...)` so we hold a `should_exit` handle and can **restart on a new port**. `FastMCP.run` gives no shutdown handle.
 - This works ONLY because uvicorn skips installing signal handlers when not on the main thread. REPEAT: keep it on a non-main daemon thread; never run HTTP on the main thread alongside tkinter.
 - Default bind is `127.0.0.1:8765` (loopback only). REPEAT: keep it loopback unless the user explicitly asks to expose it.
+
+## Restartable host / runtime port change (McpHost)
+- `McpHost(service, registry, host, port)` has `start()`, `stop()` (sets `server.should_exit=True` then joins the thread), `restart(port=, host=)` (stop then start), and `is_running()`.
+- The GUI's **Server port** entry + **Restart Server** button call `main_frame.mcp_host.restart(port=...)`, then `Core.config.save_mcp_port(port)` persists it to `config.json` (`mcp.port`) for next launch.
+- REPEAT: `stop()` must run off the tkinter main thread's event handler only briefly — it joins the daemon thread (graceful uvicorn shutdown releases the old port before the new bind). The controller stores the host as `main_frame.mcp_host`; if hosting is disabled it stays `None` and the Restart button is disabled.
+- Tests mock `uvicorn.Config`/`uvicorn.Server` and `build_mcp` (see `tests/test_mcp_host.py`) so no real socket/network is needed to verify start/stop/restart orchestration.
 
 ## Shared rate (use the UI's WPM)
 - Both the GUI host and the server speak through a shared `Core.speak_service.SpeakService`. The GUI keeps `service.set_rate(...)` in sync with the speed entry; the `speak` tool reads that rate when `rate` is omitted.

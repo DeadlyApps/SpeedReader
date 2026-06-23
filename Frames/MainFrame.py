@@ -6,7 +6,7 @@ from tkinter import Text, StringVar, BooleanVar, Toplevel
 from Core.speech_engine import SpeechEngine
 from Core.speak_service import SpeakService
 from Core.voice_registry import VoiceRegistry
-from Core.config import load_mcp_config, save_enabled_voices
+from Core.config import load_mcp_config, save_enabled_voices, save_mcp_port
 from Core.text_processing import preprocess_text, word_window, highlight_indices
 
 class MainFrame(ttk.Frame):
@@ -16,6 +16,7 @@ class MainFrame(ttk.Frame):
         self.speak_service = SpeakService(rate=500, speak_fn=self.speak_external)
         self.voices = self.speech.get_voices()
         self.voice_registry = self._build_voice_registry()
+        self.mcp_host = None  # set by the controller when MCP hosting is enabled
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
@@ -112,6 +113,21 @@ class MainFrame(ttk.Frame):
         self.voice_settings_button = ttk.Button(
             self.settings_frame, text="Voice Settings…", command=self.open_voice_settings)
         self.voice_settings_button.grid(row=0, column=4, padx=(20, 0))
+
+        # Second row: MCP server port + restart. The restart button is enabled
+        # only once the controller hosts a server (set_server_port enables it).
+        self.server_label = ttk.Label(self.settings_frame, text="Server port: ")
+        self.server_label.grid(row=1, column=0, padx=(0, 5), pady=(10, 0))
+        self.port_var = StringVar(value="8765")
+        self.port_entry = ttk.Entry(self.settings_frame, width=6, textvariable=self.port_var)
+        self.port_entry.grid(row=1, column=1, padx=(0, 20), pady=(10, 0))
+        self.restart_server_button = ttk.Button(
+            self.settings_frame, text="Restart Server", command=self.restart_server,
+            state=DISABLED)
+        self.restart_server_button.grid(row=1, column=2, columnspan=3, sticky=W, pady=(10, 0))
+        self.server_status_var = StringVar(value="")
+        self.server_status = ttk.Label(self.settings_frame, textvariable=self.server_status_var)
+        self.server_status.grid(row=1, column=3, columnspan=2, sticky=W, pady=(10, 0))
         row_index += 1
 
 
@@ -180,6 +196,38 @@ class MainFrame(ttk.Frame):
         buttons.grid(row=len(self.voices) + 1, column=0, sticky=E, padx=12, pady=12)
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).grid(row=0, column=0, padx=(0, 6))
         ttk.Button(buttons, text="Save", command=save).grid(row=0, column=1)
+
+    def set_server_port(self, port):
+        """Reflect the active MCP port in the UI and enable Restart (host is up)."""
+        self.port_var.set(str(port))
+        self.restart_server_button['state'] = NORMAL
+        self.server_status_var.set("running on {}".format(port))
+
+    def restart_server(self):
+        """Restart the MCP server on the port from the entry and persist it."""
+        if self.mcp_host is None:
+            self.server_status_var.set("hosting disabled")
+            return
+        try:
+            port = int(self.port_var.get())
+        except ValueError:
+            self.server_status_var.set("invalid port")
+            return
+        if not (1 <= port <= 65535):
+            self.server_status_var.set("port out of range")
+            return
+        self.server_status_var.set("restarting…")
+        self.restart_server_button['state'] = DISABLED
+        self.update_idletasks()
+        try:
+            self.mcp_host.restart(port=port)
+        except OSError as exc:
+            self.server_status_var.set("failed: {}".format(exc))
+            self.restart_server_button['state'] = NORMAL
+            return
+        save_mcp_port(port)
+        self.server_status_var.set("running on {}".format(port))
+        self.restart_server_button['state'] = NORMAL
 
     def on_rate_changed(self, *args):
         # Keep the shared service rate in sync so MCP agents speak at the UI rate.

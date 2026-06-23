@@ -17,6 +17,7 @@ pyttsx3==2.71 due to a bug detailed here: https://github.com/nateshmbhat/pyttsx3
 - **Speed** — words per minute (start low, e.g. 200, and work up to 500).
 - **Voice** — pick from the text-to-speech voices installed on your system; the choice applies to both your reading and any AI agent speaking through the MCP server.
 - **Voice Settings…** — choose which system voices agents are allowed to use (see below). All voices are enabled by default.
+- **Server port** + **Restart Server** — change the port the MCP server listens on and restart it on the new port without closing the app. The new port is saved to `config.json` (`mcp.port`) so it sticks across sessions. Only active when MCP hosting is enabled (see below).
 - Shortcuts: `Ctrl+B` paste & speak, `Ctrl+A` select all.
 
 ## MCP server (let AI agents speak through SpeedReader)
@@ -40,7 +41,7 @@ This is the main use case: you keep SpeedReader open to read your own text, and 
    }
    ```
 
-2. Start the app (`python SpeedReader.py`). It hosts the server over HTTP on `http://127.0.0.1:8765/mcp`, bound to localhost only.
+2. Start the app (`python SpeedReader.py`). It hosts the server over HTTP on `http://127.0.0.1:8765/mcp`, bound to localhost only. You can change the port at runtime with the **Server port** field + **Restart Server** button in the app — the new port is persisted to `config.json` for next launch (update your agent's URL to match).
 3. Point your agent at it. In VS Code this is already wired in [.vscode/mcp.json](.vscode/mcp.json):
 
    ```json
