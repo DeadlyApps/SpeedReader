@@ -32,6 +32,22 @@ class SpeechEngine:
             self.engine.setProperty('rate', rate)
             self.engine.say(text)
 
+    def ensure_loop(self, rate):
+        """Start the engine + run loop once WITHOUT speaking.
+
+        pyttsx3 allows only one run loop per process, so when speech is hosted
+        in-process (e.g. the MCP server alongside the GUI) the loop must already
+        be running before any ``say``. ``startLoop`` blocks, so call this on a
+        daemon thread. No-op if the engine already exists.
+        """
+        if self.engine is None:
+            self.engine = self._init()
+            self.engine.setProperty('rate', rate)
+            self.engine.connect('started-utterance', self._on_start)
+            self.engine.connect('started-word', self._on_word)
+            self.engine.connect('finished-utterance', self._on_end)
+            self.engine.startLoop()
+
     def stop(self):
         if self.engine is not None:
             self.engine.stop()

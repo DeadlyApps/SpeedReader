@@ -52,3 +52,25 @@ def test_stop_after_speak_stops_the_engine():
     speech.stop()
 
     fake_engine.stop.assert_called_once_with()
+
+
+def test_ensure_loop_starts_loop_once_without_speaking():
+    speech, init, fake_engine = make_engine()
+
+    speech.ensure_loop(500)
+
+    init.assert_called_once_with()
+    fake_engine.startLoop.assert_called_once_with()
+    fake_engine.say.assert_not_called()
+
+
+def test_speak_after_ensure_loop_reuses_engine_without_second_startloop():
+    speech, init, fake_engine = make_engine()
+
+    speech.ensure_loop(500)
+    speech.speak('hello', 300)
+
+    init.assert_called_once()  # engine is not re-initialized
+    fake_engine.startLoop.assert_called_once()  # loop is not started again
+    fake_engine.say.assert_called_once_with('hello')
+

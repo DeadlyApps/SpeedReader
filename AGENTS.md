@@ -9,6 +9,9 @@ Thin MVC split — keep new UI logic in the frame, not in entry points:
 - [SpeedReader.py](SpeedReader.py) — entry point. Instantiates the controller and runs `mainloop()`. Keep it minimal.
 - [Controllers/SpeedReaderController.py](Controllers/SpeedReaderController.py) — subclass of `tkinter.Tk`. Owns the window (title, grid weights) and mounts `MainFrame`.
 - [Frames/MainFrame.py](Frames/MainFrame.py) — subclass of `ttk.Frame`. Holds nearly all logic: widget layout (manual `grid` with `row_index` counter), TTS engine wiring, and key bindings.
+- [Core/](Core/) — GUI-free, unit-tested logic shared by the GUI and the MCP server: text preprocessing/word-window ([Core/text_processing.py](Core/text_processing.py)), the GUI callback engine ([Core/speech_engine.py](Core/speech_engine.py)), the headless blocking speak ([Core/speech.py](Core/speech.py)), the shared-rate TTS entry point ([Core/speak_service.py](Core/speak_service.py)), and opt-in MCP hosting config ([Core/config.py](Core/config.py)). No tkinter/pyttsx3 imports leak into tests — `pyttsx3` is injected for mocking.
+- [mcp_server.py](mcp_server.py) — locally hosted MCP server exposing a `speak` tool so agents can read text aloud on the host. Runs **stdio** standalone (`python mcp_server.py`) or is **hosted over HTTP in-process by the running GUI** (`start_http_in_thread`) when the user enables it. Reuses `Core`; VS Code connects via [.vscode/mcp.json](.vscode/mcp.json).
+
 
 ## TTS engine model (the core pattern)
 
@@ -34,13 +37,23 @@ pip install -r requirements.txt
 python SpeedReader.py
 ```
 
+Run the MCP server so an agent can call the `speak` tool. Two modes:
+
+- **Standalone (stdio)** for dev/agent-spawned use:
+
+```pwsh
+python mcp_server.py
+```
+
+- **Hosted in-process by the running GUI (HTTP)** so the user speaks text AND agents speak through the same app. Opt in via [config.json](config.json) (`{"mcp": {"enabled": true, "host": "127.0.0.1", "port": 8765}}`); the GUI then starts the server on a daemon thread at startup. Agent speech uses the **rate currently set in the UI** (shared via `SpeakService`). VS Code connects to the running app via [.vscode/mcp.json](.vscode/mcp.json) (`type: http`, `http://127.0.0.1:8765/mcp`). HIGH-RISK/REPEAT: hosting from the already-running GUI requires HTTP, not stdio, and the uvicorn server must run on a non-main daemon thread.
+
 Build a standalone EXE (config in [SpeedReader.spec](SpeedReader.spec)):
 
 ```pwsh
 pyinstaller --clean --onefile --windowed SpeedReader.spec
 ```
 
-GUI-free logic lives in [Core/](Core/) so it can be unit tested (and reused by a future MCP server) without tkinter or audio. Run the tests with:
+GUI-free logic lives in [Core/](Core/) so it can be unit tested (and is reused by the MCP server) without tkinter or audio. Run the tests with:
 
 ```pwsh
 pip install -r requirements-dev.txt

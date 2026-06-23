@@ -2,14 +2,16 @@ import threading
 import webbrowser
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
-from tkinter import Text
+from tkinter import Text, StringVar
 from Core.speech_engine import SpeechEngine
+from Core.speak_service import SpeakService
 from Core.text_processing import preprocess_text, word_window, highlight_indices
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
         ttk.Frame.__init__(self, **kw)
         self.speech = SpeechEngine(self.onStart, self.onStartWord, self.onEnd)
+        self.speak_service = SpeakService(rate=500, speak_fn=self.speak_external)
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
@@ -66,9 +68,10 @@ class MainFrame(ttk.Frame):
 
         self.speed_label = ttk.Label(self, text="Speed: ")
         self.speed_label.grid(row=row_index, column=1, pady=10)
-        self.speed_entry = ttk.Entry(self)
-        self.speed_entry.insert(0, "500")
+        self.speed_var = StringVar(value="500")
+        self.speed_entry = ttk.Entry(self, textvariable=self.speed_var)
         self.speed_entry.grid(row=row_index, column=2, pady=10)
+        self.speed_var.trace_add("write", self.on_rate_changed)
         row_index += 1
 
 
@@ -109,6 +112,13 @@ class MainFrame(ttk.Frame):
 
     def open_contribute(self):
         webbrowser.open_new_tab(GITHUB_URL)
+
+    def on_rate_changed(self, *args):
+        # Keep the shared service rate in sync so MCP agents speak at the UI rate.
+        try:
+            self.speak_service.set_rate(int(self.speed_var.get()))
+        except ValueError:
+            pass
         
 
     def paste_and_speak(self, event):
@@ -166,6 +176,17 @@ class MainFrame(ttk.Frame):
 
     def speak_on_thread(self, speech_speed, spoken_text):
         self.speech.speak(spoken_text, speech_speed)
+
+    def speak_external(self, text, rate):
+        # Entry point for MCP agent speech (called from the server thread).
+        # Marshal UI updates onto the tkinter main thread; the (already running)
+        # shared engine loop then speaks and drives the highlight callbacks.
+        def run():
+            self.spoken_text = text
+            self.text_area.delete("1.0", END)
+            self.text_area.insert(END, text)
+            self.speech.speak(text, rate)
+        self.after(0, run)
 
 
 TAG_CURRENT_WORD = "current word"
