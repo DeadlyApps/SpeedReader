@@ -1,4 +1,5 @@
 import threading
+import webbrowser
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
 from tkinter import Text
@@ -88,6 +89,10 @@ class MainFrame(ttk.Frame):
         self.stop_button.grid(row=row_index, column=2, pady=10)
         self.stop_button['state'] = DISABLED
         self.stop_button.bind("<Button-1>", self.stop)
+        row_index += 1
+
+        self.contribute_button = ttk.Button(self, text="Contribute", command=self.open_contribute)
+        self.contribute_button.grid(row=row_index, column=0, columnspan=4, pady=10)
 
         self.text_area.bind("<Control-Key-a>", self.select_all_text)
         self.text_area.bind("<Control-Key-A>", self.select_all_text)
@@ -101,6 +106,9 @@ class MainFrame(ttk.Frame):
         self.stop(None)
         self.master.destroy()
         self.master.quit()
+
+    def open_contribute(self):
+        webbrowser.open_new_tab(GITHUB_URL)
         
 
     def paste_and_speak(self, event):
@@ -161,3 +169,4 @@ class MainFrame(ttk.Frame):
 
 
 TAG_CURRENT_WORD = "current word"
+GITHUB_URL = "https://github.com/DeadlyApps/SpeedReader"
