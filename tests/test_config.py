@@ -42,6 +42,13 @@ def test_loads_enabled_voices(tmp_path):
     assert cfg.voices == ["id-1", "id-2"]
 
 
+def test_pause_when_mic_in_use_defaults_false_and_loads(tmp_path):
+    assert load_mcp_config(path=str(tmp_path / "nope.json")).pause_when_mic_in_use is False
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"mcp": {"pause_when_mic_in_use": True}}))
+    assert load_mcp_config(path=str(path)).pause_when_mic_in_use is True
+
+
 def test_save_enabled_voices_preserves_existing_config(tmp_path):
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"mcp": {"enabled": True, "port": 9000}}))

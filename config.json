@@ -3,6 +3,7 @@
         "enabled": true,
         "host": "127.0.0.1",
         "port": 8765,
+        "pause_when_mic_in_use": true,
         "voices": [
             "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0",
             "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-GB_HAZEL_11.0",

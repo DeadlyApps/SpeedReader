@@ -26,5 +26,5 @@ class SpeedReaderController(Tk):
         # Keep a handle on the frame so the UI can restart the server on a new port.
         main_frame.mcp_host = mcp_server.start_http_in_thread(
             main_frame.speak_service, main_frame.voice_registry,
-            config.host, config.port)
+            config.host, config.port, pause_when_mic_in_use=config.pause_when_mic_in_use)
         main_frame.set_server_port(config.port)

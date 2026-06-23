@@ -11,6 +11,7 @@ class McpConfig:
     host: str = "127.0.0.1"
     port: int = 8765
     voices: list = field(default_factory=list)  # enabled voice IDs; empty = all
+    pause_when_mic_in_use: bool = False  # skip agent speech while the mic is in use
 
 
 def load_mcp_config(path=None):
@@ -38,6 +39,8 @@ def load_mcp_config(path=None):
             cfg.port = int(mcp["port"])
         if "voices" in mcp and isinstance(mcp["voices"], list):
             cfg.voices = [str(v) for v in mcp["voices"]]
+        if "pause_when_mic_in_use" in mcp:
+            cfg.pause_when_mic_in_use = bool(mcp["pause_when_mic_in_use"])
     return cfg
 
 

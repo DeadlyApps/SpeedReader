@@ -68,6 +68,7 @@ Locally hosted MCP server that lets agents read text aloud on the host. See [mcp
 ## Config (opt-in hosting)
 - Hosting is OFF by default. `Core.config.load_mcp_config()` reads `config.json` (or `$SPEEDREADER_CONFIG`): `{"mcp": {"enabled": bool, "host": str, "port": int, "voices": [ids]}}`.
 - `mcp.voices` is the list of voice IDs enabled for agents (empty/absent = all voices enabled). The GUI's Voice Settings dialog writes it via `Core.config.save_enabled_voices(ids)`. REPEAT: empty list means "all enabled", so the registry is built from all system voices when no voices are configured.
+- `mcp.pause_when_mic_in_use` (bool, default false) gates the `speak` tool: when true and a call is detected (`Core.call_detection.microphone_in_use` — any app holding the mic, Windows-only), `speak` SKIPS speaking and returns a "call in progress" message instead. REPEAT: it suppresses (does not queue/defer) and ONLY affects MCP/agent speech, never the user's UI speech. Threaded through `build_mcp(pause_when_mic_in_use, call_active)` → `McpHost` → `start_http_in_thread`; the controller passes `config.pause_when_mic_in_use`. `call_active` is injectable for tests.
 - The controller lazy-imports `mcp_server` only when `enabled` is true, so the GUI does not hard-require the `mcp` package unless hosting is on. REPEAT: keep that import lazy.
 
 ## Registration

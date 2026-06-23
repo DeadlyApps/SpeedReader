@@ -17,14 +17,23 @@ import threading
 
 from mcp.server.fastmcp import FastMCP
 
+from Core.call_detection import microphone_in_use
+from Core.config import load_mcp_config
 from Core.speak_service import SpeakService
 from Core.voice_registry import VoiceRegistry
 
 
-def build_mcp(service=None, registry=None, host="127.0.0.1", port=8765):
-    """Build a FastMCP server whose tools delegate to ``service``/``registry``."""
+def build_mcp(service=None, registry=None, host="127.0.0.1", port=8765,
+              pause_when_mic_in_use=False, call_active=None):
+    """Build a FastMCP server whose tools delegate to ``service``/``registry``.
+
+    When ``pause_when_mic_in_use`` is true, the ``speak`` tool skips speaking
+    while a call is detected (``call_active()`` — microphone in use by default)
+    and returns a message instead, so agent speech never talks over the user.
+    """
     service = service or SpeakService()
     registry = registry if registry is not None else VoiceRegistry()
+    call_active = call_active or microphone_in_use
     server = FastMCP("SpeedReader", host=host, port=port)
 
     @server.tool()
@@ -84,6 +93,8 @@ def build_mcp(service=None, registry=None, host="127.0.0.1", port=8765):
         Returns:
             A short confirmation of what was spoken.
         """
+        if pause_when_mic_in_use and call_active():
+            return "Skipped: a call is in progress (microphone in use); speech was not played."
         chosen = registry.resolve_for_speak(agent=agent, voice=voice)
         used = service.speak(text, rate, voice=chosen)
         return "Spoke {} characters at {} WPM.".format(len(text), used)
@@ -91,14 +102,16 @@ def build_mcp(service=None, registry=None, host="127.0.0.1", port=8765):
     return server, service, registry
 
 
-def start_http_in_thread(service, registry=None, host="127.0.0.1", port=8765):
+def start_http_in_thread(service, registry=None, host="127.0.0.1", port=8765,
+                         pause_when_mic_in_use=False):
     """Host the MCP server over HTTP in a daemon thread (for the running GUI).
 
     uvicorn skips signal-handler installation off the main thread, so this is
     safe to run alongside the tkinter mainloop. Returns a started :class:`McpHost`
     so the GUI can restart it on a new port.
     """
-    host_obj = McpHost(service, registry=registry, host=host, port=port)
+    host_obj = McpHost(service, registry=registry, host=host, port=port,
+                       pause_when_mic_in_use=pause_when_mic_in_use)
     host_obj.start()
     return host_obj
 
@@ -114,11 +127,13 @@ class McpHost:
     daemon thread alongside the tkinter mainloop is safe.
     """
 
-    def __init__(self, service, registry=None, host="127.0.0.1", port=8765):
+    def __init__(self, service, registry=None, host="127.0.0.1", port=8765,
+                 pause_when_mic_in_use=False):
         self._service = service
         self._registry = registry
         self.host = host
         self.port = int(port)
+        self.pause_when_mic_in_use = bool(pause_when_mic_in_use)
         self._server = None
         self._thread = None
 
@@ -130,7 +145,8 @@ class McpHost:
         import uvicorn
 
         server, _, _ = build_mcp(
-            self._service, registry=self._registry, host=self.host, port=self.port)
+            self._service, registry=self._registry, host=self.host, port=self.port,
+            pause_when_mic_in_use=self.pause_when_mic_in_use)
         app = server.streamable_http_app()
         config = uvicorn.Config(app, host=self.host, port=self.port, log_level="warning")
         self._server = uvicorn.Server(config)
@@ -160,7 +176,7 @@ class McpHost:
 
 
 # Module-level server for the standalone stdio path (and import smoke tests).
-mcp, _service, _registry = build_mcp()
+mcp, _service, _registry = build_mcp(pause_when_mic_in_use=load_mcp_config().pause_when_mic_in_use)
 
 
 def main():

@@ -68,6 +68,17 @@ Rules:
 
 Speech is serialized so each utterance reads in its own voice without bleeding into the next.
 
+### Pause agent speech while you're on a call
+Set `mcp.pause_when_mic_in_use` to `true` in `config.json` to stop agents talking over you during calls:
+
+```json
+{
+  "mcp": { "enabled": true, "pause_when_mic_in_use": true }
+}
+```
+
+When enabled, the `speak` tool checks whether any app is currently using your microphone (a proxy for "in a call") and, if so, **skips** speaking and returns a message instead of playing audio. It's **off by default**, only affects agent/MCP speech (your own reading is never paused), and currently uses Windows microphone state — on other platforms it never pauses.
+
 ### Standalone (stdio)
 For development or agent-spawned use without the GUI:
 
