@@ -1,13 +1,35 @@
 import threading
 import webbrowser
 import tkinter.ttk as ttk
-from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, LEFT, SEL, INSERT, HORIZONTAL
-from tkinter import Text, StringVar, BooleanVar, Toplevel
+from tkinter.constants import END, N, S, E, W, LEFT, RIGHT, CENTER, NORMAL, DISABLED, SEL, INSERT, HORIZONTAL
+from tkinter import Text, StringVar, Toplevel, BooleanVar
+import pyttsx3
+from pyttsx3 import engine
+import re
+import platform
+import asyncio
+
+# Windows media key support
+if platform.system() == 'Windows':
+    import ctypes
+    VK_MEDIA_PLAY_PAUSE = 0xB3
+    KEYEVENTF_EXTENDEDKEY = 0x0001
+    KEYEVENTF_KEYUP = 0x0002
+    
+    # Try to import Windows Media Session API for detecting playback state
+    try:
+        from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
+        from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus
+        MEDIA_SESSION_AVAILABLE = True
+    except ImportError:
+        MEDIA_SESSION_AVAILABLE = False
+        print("Windows Media Session API not available - media detection disabled")
+
 from Core.speech_engine import SpeechEngine
 from Core.speak_service import SpeakService
-from Core.voice_registry import VoiceRegistry
-from Core.config import load_mcp_config, save_enabled_voices, save_mcp_port
+from Core.config import load_mcp_config, save_mcp_port, save_enabled_voices
 from Core.text_processing import preprocess_text, word_window, highlight_indices
+from Core.voice_registry import VoiceRegistry
 
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
@@ -26,6 +48,14 @@ class MainFrame(ttk.Frame):
         self.spoken_text = ''
         self.highlight_index1 = None
         self.highlight_index2 = None
+        self.media_was_paused = False  # Track if we paused media playback
+        self.is_speaking = False
+        self.stop_requested = False
+        self.speech_thread = None
+        self.current_session_id = 0
+        self.speech_session_id = 0
+        # For test compatibility - engine is None initially, then gets set by speech engine
+        self.engine = None
         self.build_frame_content(kw)
 
     def _build_voice_registry(self):
@@ -156,7 +186,7 @@ class MainFrame(ttk.Frame):
         self.stop_button.bind("<Button-1>", self.stop)
         row_index += 1
 
-        self.contribute_button = ttk.Button(self, text="Contribute", command=self.open_contribute)
+        self.contribute_button = ttk.Button(self, text="Contribute on GitHub", command=self.open_contribute)
         self.contribute_button.grid(row=row_index, column=0, columnspan=4, pady=10)
 
         self.text_area.bind("<Control-Key-a>", self.select_all_text)
@@ -168,7 +198,8 @@ class MainFrame(ttk.Frame):
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def on_closing(self):
-        self.stop(None)
+        # Stop any ongoing speech and clean up resources
+        self.force_stop_and_reset()
         self.master.destroy()
         self.master.quit()
 
@@ -307,24 +338,170 @@ class MainFrame(ttk.Frame):
                 break
 
     def paste_and_speak(self, event):
-        self.stop(event)
+        """Stop current speech, paste clipboard content, and start speaking."""
+        # Force stop any current speech and reset state
+        self.force_stop_and_reset()
+        
+        # Clear UI and insert new text
+        self.clear_display_labels()
         self.text_area.delete("1.0", END)
-        self.text_area.insert(END, self.master.clipboard_get())
+        try:
+            clipboard_text = self.master.clipboard_get()
+            self.text_area.insert(END, clipboard_text)
+        except Exception as e:
+            print(f"Error getting clipboard: {e}")
+            return
+        
+        # Start speaking the new text
         self.speak(event)
+
+    def force_stop_and_reset(self):
+        """Force stop current speech and reset engine for fresh start."""
+        self.stop_requested = True
+        
+        # Increment session ID to invalidate any pending callbacks from old session
+        self.speech_session_id += 1
+        
+        # Stop the current engine if running
+        if self.engine is not None:
+            try:
+                self.engine.stop()
+            except Exception as e:
+                print(f"Error stopping engine: {e}")
+            # Dispose of the engine - we'll create a fresh one
+            self.engine = None
+        
+        # Wait briefly for the speech thread to finish
+        if self.speech_thread is not None and self.speech_thread.is_alive():
+            self.speech_thread.join(timeout=0.5)
+        
+        # Reset state
+        self.is_speaking = False
+        self.stop_requested = False
+        self.speak_button['state'] = NORMAL
+        self.stop_button['state'] = DISABLED
+
+    def clear_display_labels(self):
+        """Clear all the display labels and progress."""
+        self.spoken_words['text'] = ''
+        self.current_word_label['text'] = ''
+        self.next_words['text'] = ''
+        self.progress["value"] = 0
+        
+        # Clear highlighting
+        if self.highlight_index1 is not None:
+            try:
+                self.text_area.tag_remove(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
+            except Exception:
+                pass
+            self.highlight_index1 = None
+            self.highlight_index2 = None
+
+    def pause_system_media(self):
+        """Pause any currently playing system media (Windows only).
+        
+        Uses Windows Media Session API to check if media is actually playing
+        before sending the pause command. This prevents toggling music that
+        was already paused.
+        """
+        if platform.system() != 'Windows':
+            return
+            
+        # Check if media is actually playing before pausing
+        if not self._is_media_playing():
+            # If media isn't playing, preserve existing media_was_paused flag
+            # (we may have already paused it in a previous session that was interrupted)
+            print("No media playing - skipping pause")
+            return
+            
+        try:
+            # Send media play/pause key press to pause
+            ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY, 0)
+            ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
+            self.media_was_paused = True
+            print("Paused system media playback")
+        except Exception as e:
+            print(f"Error pausing media: {e}")
+            self.media_was_paused = False
+    
+    def _is_media_playing(self):
+        """Check if system media is currently playing (Windows only).
+        
+        Uses Windows Media Session API to query the current playback state.
+        Returns True if media is playing, False otherwise.
+        """
+        if platform.system() != 'Windows':
+            return False
+            
+        if not MEDIA_SESSION_AVAILABLE:
+            # If API not available, assume nothing is playing to be safe
+            return False
+            
+        try:
+            # Run async check synchronously
+            return asyncio.run(self._check_media_playing_async())
+        except Exception as e:
+            print(f"Error checking media state: {e}")
+            return False
+    
+    async def _check_media_playing_async(self):
+        """Async helper to check media playback state."""
+        try:
+            # Get the media session manager
+            manager = await GlobalSystemMediaTransportControlsSessionManager.request_async()
+            session = manager.get_current_session()
+            
+            if session is None:
+                return False
+                
+            # Get playback info
+            playback_info = session.get_playback_info()
+            status = playback_info.playback_status
+            
+            # Check if currently playing
+            return status == GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
+        except Exception as e:
+            print(f"Error in async media check: {e}")
+            return False
+    
+    def resume_system_media(self):
+        """Resume system media playback if we previously paused it (Windows only).
+        
+        Only resumes if media_was_paused flag is set.
+        """
+        if platform.system() == 'Windows' and self.media_was_paused:
+            try:
+                # Send media play/pause key press to resume
+                ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY, 0)
+                ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0)
+                self.media_was_paused = False
+                print("Resumed system media playback")
+            except Exception as e:
+                print(f"Error resuming media: {e}")
 
     def select_all_text(self, event):
         self.text_area.tag_add(SEL, "1.0", END)
 
     def stop(self, event):
+        """Stop current speech when stop button is clicked."""
         if self.stop_button['state'].__str__() == NORMAL:
             self.speech.stop()
             self.speak_button['state'] = NORMAL
             self.stop_button['state'] = DISABLED
 
     def onStart(self, name):
+        """Called when an utterance starts."""
+        # Ignore callbacks from old speech sessions
+        if self.current_session_id != self.speech_session_id:
+            return
+        self.is_speaking = True
+        self.stop_requested = False
         self.speak_button['state'] = DISABLED
         self.stop_button['state'] = NORMAL
-        print("onStart")
+        
+        # Pause any system media playing
+        self.pause_system_media()
+        print(f"onStart: {name}")
 
     def onStartWord(self, name, location, length):
         spoken, current, next_ = word_window(self.spoken_text, location, length)
@@ -341,11 +518,72 @@ class MainFrame(ttk.Frame):
         self.progress["value"] = location
 
     def onEnd(self, name, completed):
+        """Called when an utterance finishes.
+        
+        Args:
+            name: The name of the utterance that finished
+            completed: True if speech completed normally, False if interrupted
+        """
+        # Check if this is from an old speech session (a new speech started)
+        is_old_session = self.current_session_id != self.speech_session_id
+        
+        if is_old_session:
+            print(f"onEnd: {name} - ignored (old session)")
+            return
+            
+        self.is_speaking = False
         self.speak_button['state'] = NORMAL
         self.stop_button['state'] = DISABLED
-        self.progress["maximum"] = self.spoken_text.__len__()
-        self.progress["value"] = self.spoken_text.__len__()
-        print("onEnd")
+        
+        if completed:
+            # Speech completed normally - update progress to 100%
+            self.progress["maximum"] = self.spoken_text.__len__()
+            self.progress["value"] = self.spoken_text.__len__()
+            print(f"onEnd: {name} - completed successfully")
+        else:
+            # Speech was interrupted/stopped
+            print(f"onEnd: {name} - interrupted")
+        
+        # Clear the current word highlight
+        if self.highlight_index1 is not None:
+            try:
+                self.text_area.tag_remove(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
+            except Exception:
+                pass
+            self.highlight_index1 = None
+            self.highlight_index2 = None
+        
+        # Resume any system media we paused, but only if this session wasn't
+        # interrupted by a new speech session starting
+        self.resume_system_media()
+
+    def onError(self, name, exception):
+        """Called when an error occurs during speech.
+        
+        Args:
+            name: The name of the utterance that had an error
+            exception: The exception that occurred
+        """
+        # Ignore callbacks from old speech sessions
+        if self.current_session_id != self.speech_session_id:
+            return
+            
+        self.is_speaking = False
+        self.speak_button['state'] = NORMAL
+        self.stop_button['state'] = DISABLED
+        print(f"onError: {name} - {exception}")
+        
+        # Clear highlighting on error
+        if self.highlight_index1 is not None:
+            try:
+                self.text_area.tag_remove(TAG_CURRENT_WORD, self.highlight_index1, self.highlight_index2)
+            except Exception:
+                pass
+            self.highlight_index1 = None
+            self.highlight_index2 = None
+        
+        # Resume any system media we paused
+        self.resume_system_media()
 
     def speak(self, event):
         if self.speak_button['state'].__str__() == NORMAL:
@@ -354,6 +592,10 @@ class MainFrame(ttk.Frame):
             self.text_area.insert(END, self.spoken_text)
 
             speech_speed = int(self.speed_entry.get())
+            
+            # Increment session ID for this new speech
+            self.speech_session_id += 1
+            session_id = self.speech_session_id
 
             self.thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
             self.thread.daemon = True
@@ -377,4 +619,4 @@ class MainFrame(ttk.Frame):
 
 
 TAG_CURRENT_WORD = "current word"
-GITHUB_URL = "https://github.com/DeadlyApps/SpeedReader"
+GITHUB_URL = "https://github.com/ChrisLucian/SpeedReader"
