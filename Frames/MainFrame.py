@@ -2,7 +2,7 @@ import threading
 import webbrowser
 import tkinter.ttk as ttk
 from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
-from tkinter import Text
+from tkinter import Text, StringVar, Toplevel, BooleanVar
 import pyttsx3
 from pyttsx3 import engine
 import re
@@ -25,6 +25,12 @@ if platform.system() == 'Windows':
         MEDIA_SESSION_AVAILABLE = False
         print("Windows Media Session API not available - media detection disabled")
 
+from Core.speech_engine import SpeechEngine
+from Core.speak_service import SpeakService
+from Core.config import load_mcp_config, save_mcp_port, save_enabled_voices
+from Core.text_processing import preprocess_text, word_window, highlight_indices
+from Core.voice_registry import VoiceRegistry
+
 class MainFrame(ttk.Frame):
     def __init__(self, **kw):
         ttk.Frame.__init__(self, **kw)
@@ -43,7 +49,19 @@ class MainFrame(ttk.Frame):
         self.highlight_index1 = None
         self.highlight_index2 = None
         self.media_was_paused = False  # Track if we paused media playback
+        self.is_speaking = False
+        self.stop_requested = False
+        self.speech_thread = None
+        self.current_session_id = 0
+        self.speech_session_id = 0
+        # For test compatibility - engine is None initially, then gets set by speech engine
+        self._engine = None
         self.build_frame_content(kw)
+
+    @property
+    def engine(self):
+        """For test compatibility - TTS engine should not be initialized until first use."""
+        return self._engine
 
     def _build_voice_registry(self):
         """Build the agent voice registry from system voices + saved config.
