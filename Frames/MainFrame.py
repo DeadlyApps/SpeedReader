@@ -1,7 +1,7 @@
 import threading
 import webbrowser
 import tkinter.ttk as ttk
-from tkinter.constants import END, N, S, E, W, NORMAL, DISABLED, RIGHT, CENTER, SEL, INSERT, HORIZONTAL
+from tkinter.constants import END, N, S, E, W, LEFT, RIGHT, CENTER, NORMAL, DISABLED, SEL, INSERT, HORIZONTAL
 from tkinter import Text, StringVar, Toplevel, BooleanVar
 import pyttsx3
 from pyttsx3 import engine
@@ -198,7 +198,8 @@ class MainFrame(ttk.Frame):
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def on_closing(self):
-        self.cleanup_engine()
+        # Stop any ongoing speech and clean up resources
+        self.force_stop_and_reset()
         self.master.destroy()
         self.master.quit()
 
