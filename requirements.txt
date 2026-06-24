@@ -3,3 +3,4 @@ pyinstaller
 pytest
 winrt-runtime
 winrt-Windows.Media.Control
+mcp
