@@ -55,13 +55,8 @@ class MainFrame(ttk.Frame):
         self.current_session_id = 0
         self.speech_session_id = 0
         # For test compatibility - engine is None initially, then gets set by speech engine
-        self._engine = None
+        self.engine = None
         self.build_frame_content(kw)
-
-    @property
-    def engine(self):
-        """For test compatibility - TTS engine should not be initialized until first use."""
-        return self._engine
 
     def _build_voice_registry(self):
         """Build the agent voice registry from system voices + saved config.
