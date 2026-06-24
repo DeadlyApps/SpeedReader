@@ -593,9 +593,13 @@ class MainFrame(ttk.Frame):
 
             speech_speed = int(self.speed_entry.get())
             
-            # Increment session ID for this new speech
+            # Increment session ID for this new speech and mark it active so the
+            # engine callbacks (onStart/onStartWord/onEnd) recognize it instead
+            # of treating it as a stale session and bailing out — that bail-out
+            # is what previously left the Stop button disabled while speaking.
             self.speech_session_id += 1
             session_id = self.speech_session_id
+            self.current_session_id = session_id
 
             self.thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
             self.thread.daemon = True

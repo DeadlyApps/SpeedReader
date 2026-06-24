@@ -352,6 +352,68 @@ class TestMainFrameStopFunctionality:
         assert str(frame.stop_button['state']) == DISABLED
 
 
+class TestMainFrameSessionSync:
+    """Regression tests: speak() must mark the new session active so the engine
+    callbacks (which guard on current_session_id == speech_session_id) run and
+    enable the Stop button instead of bailing out as a stale session."""
+
+    @patch('Frames.MainFrame.threading.Thread')
+    def test_speak_marks_session_active(self, mock_thread, frame):
+        """speak() should set current_session_id to the new speech_session_id."""
+        # Arrange
+        mock_thread.return_value.daemon = True
+        mock_thread.return_value.start = Mock()
+        frame.current_session_id = 0
+        frame.speech_session_id = 0
+        frame.text_area.insert(END, "Test text")
+
+        # Act
+        frame.speak(None)
+
+        # Assert
+        assert frame.speech_session_id == 1
+        assert frame.current_session_id == frame.speech_session_id
+
+    @patch('Frames.MainFrame.threading.Thread')
+    def test_speak_then_on_start_enables_stop_button(self, mock_thread, frame):
+        """After speak(), the engine onStart callback should enable Stop.
+
+        This reproduces the original bug: speak() bumped speech_session_id but
+        left current_session_id behind, so onStart treated the live session as
+        stale and never enabled the Stop button.
+        """
+        # Arrange
+        mock_thread.return_value.daemon = True
+        mock_thread.return_value.start = Mock()
+        frame.stop_button['state'] = DISABLED
+        frame.text_area.insert(END, "Test text")
+
+        # Act - start speech, then simulate the engine's started-utterance callback
+        frame.speak(None)
+        frame.onStart("Test text")
+
+        # Assert
+        assert str(frame.stop_button['state']) == NORMAL
+        assert str(frame.speak_button['state']) == DISABLED
+
+    @patch('Frames.MainFrame.threading.Thread')
+    def test_speak_then_on_end_disables_stop_button(self, mock_thread, frame):
+        """After speak(), the engine onEnd callback should run and reset buttons."""
+        # Arrange
+        mock_thread.return_value.daemon = True
+        mock_thread.return_value.start = Mock()
+        frame.text_area.insert(END, "Test text")
+
+        # Act
+        frame.speak(None)
+        frame.onStart("Test text")
+        frame.onEnd("Test text", True)
+
+        # Assert
+        assert str(frame.stop_button['state']) == DISABLED
+        assert str(frame.speak_button['state']) == NORMAL
+
+
 class TestMainFramePasteAndSpeak:
     """Tests for paste and speak functionality."""
 
