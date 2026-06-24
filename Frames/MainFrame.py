@@ -395,8 +395,9 @@ class MainFrame(ttk.Frame):
             
         # Check if media is actually playing before pausing
         if not self._is_media_playing():
+            # If media isn't playing, preserve existing media_was_paused flag
+            # (we may have already paused it in a previous session that was interrupted)
             print("No media playing - skipping pause")
-            self.media_was_paused = False
             return
             
         try:
@@ -509,8 +510,10 @@ class MainFrame(ttk.Frame):
             name: The name of the utterance that finished
             completed: True if speech completed normally, False if interrupted
         """
-        # Ignore callbacks from old speech sessions
-        if self.current_session_id != self.speech_session_id:
+        # Check if this is from an old speech session (a new speech started)
+        is_old_session = self.current_session_id != self.speech_session_id
+        
+        if is_old_session:
             print(f"onEnd: {name} - ignored (old session)")
             return
             
@@ -536,7 +539,8 @@ class MainFrame(ttk.Frame):
             self.highlight_index1 = None
             self.highlight_index2 = None
         
-        # Resume any system media we paused
+        # Resume any system media we paused, but only if this session wasn't
+        # interrupted by a new speech session starting
         self.resume_system_media()
 
     def onError(self, name, exception):
