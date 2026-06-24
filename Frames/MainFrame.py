@@ -186,7 +186,7 @@ class MainFrame(ttk.Frame):
         self.stop_button.bind("<Button-1>", self.stop)
         row_index += 1
 
-        self.contribute_button = ttk.Button(self, text="Contribute", command=self.open_contribute)
+        self.contribute_button = ttk.Button(self, text="Contribute on GitHub", command=self.open_contribute)
         self.contribute_button.grid(row=row_index, column=0, columnspan=4, pady=10)
 
         self.text_area.bind("<Control-Key-a>", self.select_all_text)
@@ -619,4 +619,4 @@ class MainFrame(ttk.Frame):
 
 
 TAG_CURRENT_WORD = "current word"
-GITHUB_URL = "https://github.com/DeadlyApps/SpeedReader"
+GITHUB_URL = "https://github.com/ChrisLucian/SpeedReader"
