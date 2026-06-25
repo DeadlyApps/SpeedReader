@@ -448,6 +448,17 @@ class TestMainFramePasteAndSpeak:
         # Assert
         assert "Clipboard text" in frame.text_area.get("1.0", END)
 
+    def test_paste_and_speak_bound_to_key_release_not_key_press(self, frame):
+        """Ctrl+B must fire on key RELEASE, not press, so holding it down does
+        not auto-repeat into a storm of interrupting speech sessions."""
+        # Act
+        release_binding = frame.master.bind("<Control-KeyRelease-b>")
+        press_binding = frame.master.bind("<Control-Key-b>")
+
+        # Assert
+        assert release_binding  # bound on release
+        assert not press_binding  # not bound on press (avoids auto-repeat storm)
+
 class TestMainFrameEngineLifecycle:
     """Tests for TTS engine lifecycle and cleanup."""
 
@@ -549,6 +560,27 @@ class TestMainFrameEngineLifecycle:
         frame.onEnd("test", True)
 
         # Assert - should not change state
+        assert frame.is_speaking is True
+
+    def test_on_end_from_interrupted_utterance_does_not_disable_stop(self, frame):
+        """Double Ctrl+B: a stale utterance's late onEnd must not disable Stop.
+
+        When new speech interrupts old speech, the interrupted utterance's
+        finished-utterance can arrive AFTER the new utterance's onStart. The
+        new utterance is tagged with the current session id; the stale one has
+        an older id and must be ignored so the Stop button stays enabled.
+        """
+        # Arrange - new utterance (session 5) is now active and speaking
+        frame.current_session_id = 5
+        frame.speech_session_id = 5
+        frame.onStart(5)  # new utterance started -> Stop enabled
+        assert str(frame.stop_button['state']) == NORMAL
+
+        # Act - the interrupted older utterance (session 4) finishes late
+        frame.onEnd(4, False)
+
+        # Assert - Stop stays enabled because the callback was stale
+        assert str(frame.stop_button['state']) == NORMAL
         assert frame.is_speaking is True
 
     def test_on_error_clears_is_speaking_flag(self, frame):

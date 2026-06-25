@@ -138,3 +138,71 @@ def test_primed_loop_owns_engine_creation_and_caches_voices():
     fake_engine.startLoop.assert_called_once()
 
 
+def test_interrupt_speak_stops_current_utterance_before_speaking():
+    # Ctrl+B 'barge in': an interrupting speak flushes (stops) the engine first,
+    # then speaks the new text.
+    speech, init, fake_engine = make_engine()
+
+    speech.speak('queued', 500, block=False)
+    speech.speak('pasted', 500, block=False, interrupt=True)
+
+    fake_engine.stop.assert_called_once_with()
+    fake_engine.say.assert_any_call('pasted')
+
+
+def test_flush_cancels_a_queued_speak():
+    # A speak whose flush generation is stale (a flush happened while it was
+    # queued) is dropped instead of speaking. The MCP server never flushes, so
+    # its utterances keep their generation and still play.
+    speech, init, fake_engine = make_engine()
+    speech.speak('prime', 500, block=False)  # create the engine
+    fake_engine.say.reset_mock()
+
+    my_generation = speech._flush_generation
+    speech.flush()  # simulate Ctrl+B emptying the queue
+
+    # A caller that recorded the pre-flush generation must not speak.
+    with speech._speak_lock:
+        cancelled = speech._flush_generation != my_generation
+    assert cancelled
+    fake_engine.stop.assert_called_once_with()
+
+
+def test_flush_before_engine_exists_is_safe():
+    speech, init, fake_engine = make_engine()
+
+    speech.flush()  # no engine yet
+
+    fake_engine.stop.assert_not_called()
+    assert speech._flush_generation == 1
+
+
+def test_non_interrupt_speak_does_not_flush():
+    # The MCP server path (interrupt=False) must never stop the engine; it queues.
+    speech, init, fake_engine = make_engine()
+
+    speech.speak('first', 500, block=False)
+    speech.speak('second', 500, block=False)
+
+    fake_engine.stop.assert_not_called()
+    assert fake_engine.say.call_args_list == [call('first'), call('second')]
+
+
+def test_name_is_passed_through_to_engine_say():
+    # The GUI tags utterances with a session id so its callbacks can ignore an
+    # interrupted utterance's late finished-utterance.
+    speech, init, fake_engine = make_engine()
+
+    speech.speak('hello', 500, block=False, name=7)
+
+    fake_engine.say.assert_called_once_with('hello', 7)
+
+
+def test_speak_without_name_omits_say_name_argument():
+    speech, init, fake_engine = make_engine()
+
+    speech.speak('hello', 500, block=False)
+
+    fake_engine.say.assert_called_once_with('hello')
+
+

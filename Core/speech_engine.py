@@ -43,6 +43,7 @@ class SpeechEngine:
         self._engine_ready = threading.Event()
         self._voices_ready = threading.Event()
         self._loop_requested = False
+        self._flush_generation = 0
 
     def _ensure_engine(self):
         """Create + wire the engine. MUST run on the dedicated loop thread.
@@ -90,18 +91,52 @@ class SpeechEngine:
             return self.engine
         return self._ensure_engine()
 
-    def speak(self, text, rate, voice=None, block=True):
+    def flush(self):
+        """Cancel queued utterances and interrupt the one being spoken now.
+
+        Bumps the flush generation so any callers blocked waiting for the speak
+        lock abort instead of speaking, then stops the engine to interrupt the
+        current utterance. Used by the GUI 'barge in' (Ctrl+B) path. The MCP
+        server never flushes, so agent utterances queue and play in order.
+        """
+        self._flush_generation += 1
+        if self.engine is not None:
+            try:
+                self.engine.stop()
+            except Exception:
+                pass
+
+    def speak(self, text, rate, voice=None, block=True, interrupt=False, name=None):
         """Speak one utterance, optionally with a per-call ``voice`` id.
 
         Serialized via a lock; when ``block`` (default) it waits for the
         utterance to finish so the next speaker's voice cannot bleed in. Run on
         a daemon/worker thread — never the tkinter main thread.
+
+        When ``interrupt`` is set, the current utterance is stopped and any
+        already-queued utterances are cancelled before this one speaks (the GUI
+        Ctrl+B path). Calls left ``interrupt=False`` (e.g. the MCP server) queue
+        normally and play in order.
+
+        ``name`` is passed through to ``engine.say`` so it is echoed back to the
+        started/word/finished callbacks; the GUI uses it to tag each utterance
+        with a session id and ignore callbacks from an interrupted utterance
+        that arrive after a new one has already started.
         """
+        if interrupt:
+            self.flush()
+        my_generation = self._flush_generation
         with self._speak_lock:
+            if self._flush_generation != my_generation:
+                # A flush happened while this call waited in the queue — drop it.
+                return
             engine = self._await_engine()
             self._apply_properties(rate, voice)
             self._done.clear()
-            engine.say(text)
+            if name is None:
+                engine.say(text)
+            else:
+                engine.say(text, name)
             if block:
                 self._done.wait(timeout=600)
 

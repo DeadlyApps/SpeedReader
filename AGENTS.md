@@ -65,6 +65,7 @@ The tests mock `pyttsx3` (see [tests/test_speech_engine.py](tests/test_speech_en
 
 # Custom Instructions
 - ALWAYS dogfood your own MCP server. Whenever you need to ask me a question or finish a task, use the MCP to read it out loud. If the MCP is not available, remind me to turn it on for dogfooding purposes.
+- ALWAYS add or update unit tests whenever functionality is added or changed — in the same change, never defer it. Put GUI-free logic in [Core/](Core/) so it can be tested, and run `python -m pytest -q` to confirm green before finishing.
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
 - list skills you used in completing the prompt
 - ALWAYS create (not just suggest) any skill you wished you had before starting the prompt — create the missing `SKILL.md` under `.github/skills/<name>/` before finishing, then list what you created
@@ -74,3 +75,4 @@ The tests mock `pyttsx3` (see [tests/test_speech_engine.py](tests/test_speech_en
 - be repetitive in instructions and skills with high risk items due to the unpredictability of large language models
 - REPEAT: missing skills must be CREATED as files, never left as suggestions
 - REPEAT: user-facing changes are not done until [README.md](README.md) reflects them
+- REPEAT: added or changed functionality is not done until unit tests cover it and `pytest` is green

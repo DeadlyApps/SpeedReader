@@ -192,8 +192,13 @@ class MainFrame(ttk.Frame):
         self.text_area.bind("<Control-Key-a>", self.select_all_text)
         self.text_area.bind("<Control-Key-A>", self.select_all_text)
 
-        self.master.bind("<Control-Key-b>", self.paste_and_speak)
-        self.master.bind("<Control-Key-B>", self.paste_and_speak)
+        # Bind paste & speak to KeyRelease, not KeyPress: holding Ctrl+B fires
+        # KeyPress repeatedly (auto-repeat) on Windows, which spammed dozens of
+        # interrupting speech sessions and raced the Stop button into a bad
+        # state. KeyRelease fires once per physical release, so each barge-in is
+        # a single, clean interrupt.
+        self.master.bind("<Control-KeyRelease-b>", self.paste_and_speak)
+        self.master.bind("<Control-KeyRelease-B>", self.paste_and_speak)
 
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -352,8 +357,10 @@ class MainFrame(ttk.Frame):
             print(f"Error getting clipboard: {e}")
             return
         
-        # Start speaking the new text
-        self.speak(event)
+        # Start speaking the new text, interrupting (flushing) anything already
+        # queued or playing so the pasted text plays now instead of waiting for
+        # the queue to drain.
+        self.speak(event, interrupt=True)
 
     def force_stop_and_reset(self):
         """Force stop current speech and reset engine for fresh start."""
@@ -489,9 +496,23 @@ class MainFrame(ttk.Frame):
             self.speak_button['state'] = NORMAL
             self.stop_button['state'] = DISABLED
 
+    def _is_stale_utterance(self, name):
+        """True if a callback belongs to an interrupted/old user utterance.
+
+        GUI utterances are tagged with their int session id via ``engine.say``,
+        so an interrupted utterance's ``finished-utterance`` (which can arrive
+        AFTER the new utterance's ``started-utterance`` during a Ctrl+B
+        barge-in) doesn't disable the Stop button or resume paused media while
+        the new speech is playing. Agent (MCP) speech passes no session id
+        (name is ``None``), so it is never treated as stale here.
+        """
+        return isinstance(name, int) and name != self.current_session_id
+
     def onStart(self, name):
         """Called when an utterance starts."""
         # Ignore callbacks from old speech sessions
+        if self._is_stale_utterance(name):
+            return
         if self.current_session_id != self.speech_session_id:
             return
         self.is_speaking = True
@@ -504,6 +525,8 @@ class MainFrame(ttk.Frame):
         print(f"onStart: {name}")
 
     def onStartWord(self, name, location, length):
+        if self._is_stale_utterance(name):
+            return
         spoken, current, next_ = word_window(self.spoken_text, location, length)
         self.spoken_words['text'] = spoken
         self.current_word_label['text'] = current
@@ -525,7 +548,8 @@ class MainFrame(ttk.Frame):
             completed: True if speech completed normally, False if interrupted
         """
         # Check if this is from an old speech session (a new speech started)
-        is_old_session = self.current_session_id != self.speech_session_id
+        is_old_session = self._is_stale_utterance(name) or \
+            self.current_session_id != self.speech_session_id
         
         if is_old_session:
             print(f"onEnd: {name} - ignored (old session)")
@@ -585,7 +609,7 @@ class MainFrame(ttk.Frame):
         # Resume any system media we paused
         self.resume_system_media()
 
-    def speak(self, event):
+    def speak(self, event, interrupt=False):
         if self.speak_button['state'].__str__() == NORMAL:
             self.spoken_text = preprocess_text(self.text_area.get("1.0", END))
             self.text_area.delete("1.0", END)
@@ -601,12 +625,12 @@ class MainFrame(ttk.Frame):
             session_id = self.speech_session_id
             self.current_session_id = session_id
 
-            self.thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text))
+            self.thread = threading.Thread(target=self.speak_on_thread, args=(speech_speed, self.spoken_text, interrupt, session_id))
             self.thread.daemon = True
             self.thread.start()
 
-    def speak_on_thread(self, speech_speed, spoken_text):
-        self.speech.speak(spoken_text, speech_speed)
+    def speak_on_thread(self, speech_speed, spoken_text, interrupt=False, name=None):
+        self.speech.speak(spoken_text, speech_speed, interrupt=interrupt, name=name)
 
     def speak_external(self, text, rate, voice=None):
         # Entry point for MCP agent speech (called from the server thread).
