@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from tkinter.constants import NORMAL, DISABLED, END, SEL
 from Frames.MainFrame import TAG_CURRENT_WORD
+from Core.config import load_mcp_config, save_enabled_voices
 
 
 class TestMainFrameInitialization:

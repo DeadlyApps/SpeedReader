@@ -22,12 +22,13 @@ if platform.system() == 'Windows':
         from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionPlaybackStatus
         MEDIA_SESSION_AVAILABLE = True
     except ImportError:
+        # Fallback for environments where the API is not available (e.g., CI/testing)
         MEDIA_SESSION_AVAILABLE = False
-        print("Windows Media Session API not available - media detection disabled")
+        print("Windows Media Session API not available - media detection disabled.")
 
 from Core.speech_engine import SpeechEngine
 from Core.speak_service import SpeakService
-from Core.config import load_mcp_config, save_mcp_port, save_enabled_voices
+from Core.config import load_mcp_config, save_enabled_voices
 from Core.text_processing import preprocess_text, word_window, highlight_indices
 from Core.voice_registry import VoiceRegistry
 
@@ -321,7 +322,7 @@ class MainFrame(ttk.Frame):
             self.server_status_var.set("failed: {}".format(exc))
             self.restart_server_button['state'] = NORMAL
             return
-        save_mcp_port(port)
+        save_enabled_voices([vid for vid, _ in self.voices])
         self.server_status_var.set("running on {}".format(port))
         self.restart_server_button['state'] = NORMAL
 

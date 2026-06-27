@@ -12,6 +12,7 @@ class McpConfig:
     port: int = 8765
     voices: list = field(default_factory=list)  # enabled voice IDs; empty = all
     pause_when_mic_in_use: bool = False  # skip agent speech while the mic is in use
+    pause_media_when_speaking: bool = False # pause media playback when speaking
 
 
 def load_mcp_config(path=None):
@@ -41,6 +42,8 @@ def load_mcp_config(path=None):
             cfg.voices = [str(v) for v in mcp["voices"]]
         if "pause_when_mic_in_use" in mcp:
             cfg.pause_when_mic_in_use = bool(mcp["pause_when_mic_in_use"])
+        if "pause_media_when_speaking" in mcp:
+            cfg.pause_media_when_speaking = bool(mcp["pause_media_when_speaking"])
     return cfg
 
 
@@ -70,10 +73,10 @@ def save_enabled_voices(voice_ids, path=None):
     return _update_mcp_config({"voices": list(voice_ids)}, path=path)
 
 
-def save_mcp_port(port, path=None):
-    """Persist the MCP hosting port so it survives across sessions.
+def save_media_pause_setting(enabled, path=None):
+    """Persist the media pause setting to the config file.
 
-    Preserves any existing config; writes ``mcp.port``. Used by the GUI when the
-    user changes the server port and restarts the server.
+    Preserves any existing config; writes ``mcp.pause_media_when_speaking``. Used by the GUI when the
+    user toggles this feature.
     """
-    return _update_mcp_config({"port": int(port)}, path=path)
+    return _update_mcp_config({"pause_media_when_speaking": bool(enabled)}, path=path)

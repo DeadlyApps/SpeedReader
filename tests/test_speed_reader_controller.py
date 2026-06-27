@@ -2,6 +2,7 @@
 import pytest
 from Controllers.SpeedReaderController import SpeedReaderController
 from Frames.MainFrame import MainFrame
+from Core.config import load_mcp_config, save_enabled_voices
 
 
 class TestSpeedReaderController:

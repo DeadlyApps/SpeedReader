@@ -106,3 +106,19 @@ def test_speed_entry_default_value():
 - Integration points with external systems
 
 Keep this file current so future AI agents benefit from your learnings.
+
+
+When using workspace search or code usage tools:
+
+Never pass a full package namespace (e.g., 'a.b.c') as a single symbol unless searching for an explicit import statement.
+Breakdown symbol searches to the specific Class, Method, or Variable name.
+Always verify that the 'arguments' object matches the exact JSON schema defined by the tool.
+
+
+
+When using workspace search or code usage tools:
+
+Never pass a full package namespace (e.g., 'a.b.c') as a single symbol unless searching for an explicit import statement.
+Breakdown symbol searches to the specific Class, Method, or Variable name.
+Always verify that the 'arguments' object matches the exact JSON schema defined by the tool.
+

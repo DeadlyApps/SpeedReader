@@ -80,6 +80,19 @@ Set `mcp.pause_when_mic_in_use` to `true` in `config.json` to stop agents talkin
 
 When enabled, the `speak` tool checks whether any app is currently using your microphone (a proxy for "in a call") and, if so, **skips** speaking and returns a message instead of playing audio. It's **off by default**, only affects agent/MCP speech (your own reading is never paused), and currently uses Windows microphone state — on other platforms it never pauses.
 
+### Media Pause on Speaking
+A new setting, `mcp.pause_media_when_speaking`, controls whether the system should pause media playback (like background music or videos) when SpeedReader is actively speaking. This feature is useful for ensuring that TTS audio is not masked by other sounds playing on the system.
+
+To enable this:
+1. Update your `config.json` at the repo root to include:
+
+   ```json
+   {
+     "mcp": { "enabled": true, "pause_media_when_speaking": true }
+   }
+   ```
+2. Restart SpeedReader for the change to take effect.
+
 ### Standalone (stdio)
 For development or agent-spawned use without the GUI:
 
